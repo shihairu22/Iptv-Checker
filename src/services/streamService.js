@@ -28,6 +28,12 @@ class StreamService {
 
     async save() {
         const payload = { streams: this.multicastList, settings: this.settings };
+        // 优化: 日常保存不再生成备份文件，减少 IO
+        return await persistence.writeJson('streams.json', payload);
+    }
+
+    async backupData() {
+        const payload = { streams: this.multicastList, settings: this.settings };
         return await persistence.saveWithBackup('streams.json', payload);
     }
 
