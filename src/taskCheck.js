@@ -2,9 +2,11 @@ const fs = require('fs');
 const path = require('path');
 const EventEmitter = require('events');
 const { ffprobeCheck } = require('./ffprobe');
+const persistence = require('./services/persistenceService');
+const streamService = require('./services/streamService');
 const packageJson = require('../package.json');
 
-const STATE_FILE = path.join(__dirname, '../data/current_task.json');
+const STATE_FILE = 'current_task.json';
 const LOG_SIZE = 50;
 
 class TaskManager extends EventEmitter {
@@ -26,145 +28,110 @@ class TaskManager extends EventEmitter {
         };
         this.activeWorkers = 0;
         this.queueIndex = 0;
+        this.resultBuffer = []; // 暂存检查结果，批量写入
 
-        // Ensure data dir
-        const dataDir = path.join(__dirname, '../data');
-        if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+        // 初始化加载状态
+        this.init().catch(err => console.error('Task init failed:', err));
+    }
 
-        // Load state on boot
-        this.loadState();
+    async init() {
+        await this.loadState();
+        setInterval(() => this.flushResults(), 3000); // 定时将结果写入 disk
     }
 
     log(msg) {
-        this.task.logs.unshift(`[${new Date().toLocaleTimeString()}] ${msg}`);
+        const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        this.task.logs.unshift(line);
         if (this.task.logs.length > LOG_SIZE) this.task.logs.pop();
+        console.log('[TaskManager]', msg);
     }
 
-    saveState() {
-        try {
-            const state = { ...this.task, items: [] }; // Don't save huge list
-            fs.writeFileSync(STATE_FILE, JSON.stringify(state));
-        } catch (e) { }
+    async saveState() {
+        // 保存时剔除 items 大数组以减小 IO，items 启动时重新生成或单独存储
+        // 为简单起见，如果 items 不大可以存。但在 IPTV 场景 items 可能很大。
+        // 策略：只存 params，重启时 regenerate items，然后 fast-forward 到 finished 索引
+        const stateToSave = {
+            ...this.task,
+            items: [] // 暂不存 items，靠 regenerate
+        };
+        await persistence.writeJson(STATE_FILE, stateToSave);
     }
 
-    loadState() {
-        try {
-            if (fs.existsSync(STATE_FILE)) {
-                const raw = fs.readFileSync(STATE_FILE, 'utf-8');
-                const state = JSON.parse(raw);
-                if (state.running || state.paused) {
-                    // Restore task
-                    this.task = { ...state, items: [] };
-                    this.regenerateItems();
-                    this.queueIndex = this.task.finished;
-                    this.activeWorkers = 0;
-                    if (this.task.running) {
-                        this.task.paused = true; // Start as paused on reboot
-                        this.task.running = false;
-                        this.log('服务重启，任务已暂停');
-                    }
-                }
+    async loadState() {
+        const state = await persistence.readJson(STATE_FILE, null);
+        if (state && (state.running || state.paused)) {
+            this.task = { ...state, items: [] };
+            this.regenerateItems();
+
+            // 恢复进度
+            this.queueIndex = this.task.finished;
+            this.activeWorkers = 0;
+
+            if (this.task.running) {
+                this.task.running = true; // 保持运行状态
+                this.log('服务重启，正在恢复之前的扫描任务...');
+                this.processQueue();
+            } else {
+                this.log('服务重启，任务处于暂停状态');
             }
-        } catch (e) {
-            this.log('恢复任务状态失败');
         }
     }
 
     regenerateItems() {
         const { type, params } = this.task;
         this.task.items = [];
-        if (type === 'range') {
-            const { startUrl, endUrl, ports } = params;
-            // ... logic to generate range ...
-            // Need ip conversion utils
-            const s = this.parseRtp(startUrl);
-            const e = this.parseRtp(endUrl);
-            const pList = this.parsePorts(ports);
-            if (s && e) {
-                let a = s.ipInt, b = e.ipInt;
-                if (a > b) [a, b] = [b, a];
-                const count = b - a + 1;
-                // Default port logic
-                let targetPorts = pList;
-                if (targetPorts.length === 0) {
-                    targetPorts = [s.port];
-                    if (e.port !== s.port) targetPorts.push(e.port);
-                }
-                for (let i = 0; i < count; i++) {
-                    const ip = this.intToIp(a + i);
-                    for (const port of targetPorts) {
-                        this.task.items.push({ name: '', url: `rtp://${ip}:${port}` });
-                    }
-                }
-            }
-        } else if (type === 'batch') {
-            const { batchText } = params;
+
+        if (type === 'batch') {
+            const { batchText, udpxyUrl } = params;
             const lines = (batchText || '').split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+
+            // 处理 [1-10] 范围
+            const expandBracketRange = (url) => {
+                const match = url.match(/\[(\d+)-(\d+)\]/);
+                if (!match) return [url];
+                const [full, start, end] = match;
+                const s = parseInt(start);
+                const e = parseInt(end);
+                const prefix = url.slice(0, match.index);
+                const suffix = url.slice(match.index + full.length);
+                const res = [];
+                const width = start.length; // 保持前导零宽度
+                for (let i = Math.min(s, e); i <= Math.max(s, e); i++) {
+                    res.push(`${prefix}${String(i).padStart(width, '0')}${suffix}`);
+                }
+                return res;
+            };
+
             lines.forEach(line => {
+                // 格式可能是: "CCTV1,rtp://..." 或 "http://..."
                 const parts = line.split(',');
-                const name = parts.length > 1 ? parts[0].trim() : '';
-                const url = parts.length > 1 ? parts[1].trim() : parts[0].trim();
-                const expanded = this.expandBracketRange(url);
-                expanded.forEach(u => this.task.items.push({ name, url: u }));
+                let name = '';
+                let urlRaw = '';
+                if (parts.length > 1) {
+                    name = parts[0].trim();
+                    urlRaw = parts.slice(1).join(',').trim();
+                } else {
+                    urlRaw = parts[0].trim();
+                }
+
+                name = name.replace(/^[`'"]+|[`'"]+$/g, '');
+                urlRaw = urlRaw.replace(/^[`'"]+|[`'"]+$/g, '');
+
+                if (urlRaw) {
+                    const expanded = expandBracketRange(urlRaw);
+                    expanded.forEach(u => this.task.items.push({ name, url: u, udpxyUrl }));
+                }
             });
         }
-        this.task.total = this.task.items.length;
-    }
+        // TODO: 支持 'range' 做组播扫描，逻辑类似
 
-    // Utils
-    intToIp(int) {
-        return [(int >>> 24) & 0xFF, (int >>> 16) & 0xFF, (int >>> 8) & 0xFF, int & 0xFF].join('.');
-    }
-    ipToInt(ip) {
-        const parts = ip.split('.').map(Number);
-        return ((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0;
-    }
-    parseRtp(u) {
-        const s = (u || '').trim();
-        if (!s.startsWith('rtp://')) return null;
-        const body = s.slice(6);
-        const parts = body.split(':');
-        if (parts.length !== 2) return null;
-        return { ipInt: this.ipToInt(parts[0]), port: parseInt(parts[1]), host: parts[0] };
-    }
-    parsePorts(str) {
-        const ports = [];
-        const parts = (str || '').split(',').map(s => s.trim()).filter(Boolean);
-        for (const p of parts) {
-            if (p.includes('-')) {
-                const [a, b] = p.split('-').map(Number);
-                if (!isNaN(a) && !isNaN(b)) {
-                    for (let i = Math.min(a, b); i <= Math.max(a, b); i++) ports.push(i);
-                }
-            } else {
-                const n = Number(p);
-                if (!isNaN(n)) ports.push(n);
-            }
-        }
-        return [...new Set(ports)];
-    }
-    expandBracketRange(url) {
-        const match = url.match(/\[(\d+)-(\d+)\]/);
-        if (!match) return [url];
-        const [full, start, end] = match;
-        const s = parseInt(start);
-        const e = parseInt(end);
-        const prefix = url.slice(0, match.index);
-        const suffix = url.slice(match.index + full.length);
-        const res = [];
-        const fmt = (n) => String(n).padStart(start.length, '0'); // Keep padding? standard behavior usually expects padding if start has leading zeros
-        // But let's assume simple number
-        for (let i = Math.min(s, e); i <= Math.max(s, e); i++) {
-            res.push(`${prefix}${i}${suffix}`);
-        }
-        return res;
+        this.task.total = this.task.items.length;
     }
 
     start(params) {
         if (this.task.running) return false;
 
-        // Init task
-        this.task.type = params.type;
+        this.task.type = params.type || 'batch';
         this.task.params = params;
         this.task.concurrency = parseInt(params.concurrency) || 5;
         this.task.startTime = Date.now();
@@ -180,7 +147,7 @@ class TaskManager extends EventEmitter {
         this.task.running = true;
         this.task.paused = false;
 
-        this.log(`任务启动: ${this.task.type} 扫描，总数 ${this.task.total}`);
+        this.log(`任务启动，共 ${this.task.total} 条，并发 ${this.task.concurrency}`);
         this.saveState();
         this.processQueue();
         return true;
@@ -190,21 +157,8 @@ class TaskManager extends EventEmitter {
         if (!this.task.running) return;
         this.task.running = false;
         this.task.paused = true;
-        this.log('任务已暂停');
+        this.log('任务已手动暂停');
         this.saveState();
-    }
-
-    resume() {
-        if (!this.task.items.length && this.task.params) {
-            this.regenerateItems();
-        }
-        if (this.task.finished >= this.task.total) return false;
-
-        this.task.running = true;
-        this.task.paused = false;
-        this.log('任务继续');
-        this.processQueue();
-        return true;
     }
 
     getStatus() {
@@ -216,66 +170,95 @@ class TaskManager extends EventEmitter {
             success: this.task.successCount,
             fail: this.task.failCount,
             logs: this.task.logs,
-            version: packageJson.version // Add version
+            version: packageJson.version
         };
+    }
+
+    async flushResults() {
+        if (this.resultBuffer.length > 0) {
+            const batch = [...this.resultBuffer];
+            this.resultBuffer = [];
+            await streamService.addStreamBatch(batch);
+        }
     }
 
     processQueue() {
         if (!this.task.running || this.task.paused) return;
 
-        // High concurrency loop
+        // 填充 worker 直到达到并发限制
         while (this.activeWorkers < this.task.concurrency && this.queueIndex < this.task.items.length) {
             const item = this.task.items[this.queueIndex];
-            const currentIndex = this.queueIndex; // capture scope
             this.queueIndex++;
             this.activeWorkers++;
 
-            let fullUrl = item.url;
-            let udpxy = this.task.params.udpxyUrl || '';
-            // Construct full URL
-            if (fullUrl.startsWith('rtp://')) {
-                fullUrl = `${udpxy}/rtp/${fullUrl.replace('rtp://', '')}`;
-            }
-
-            ffprobeCheck(fullUrl, (data) => {
+            this.checkOne(item).then(() => {
                 this.activeWorkers--;
                 this.task.finished++;
 
-                if (data.isAvailable) {
-                    this.task.successCount++;
-                    // Emit result
-                    this.emit('result', {
-                        ...data,
-                        originalUrl: item.url,
-                        name: item.name,
-                        udpxy: udpxy
-                    });
-                } else {
-                    this.task.failCount++;
-                }
-
-                // Log every 50 or on success
-                if (data.isAvailable || this.task.finished % 20 === 0) {
-                    const status = data.isAvailable ? '✅在线' : '❌离线';
-                    this.log(`${status}: ${item.url} (${data.resolution || '-'})`);
-                }
-
-                // Check completion
+                // 检查完成
                 if (this.activeWorkers === 0 && this.queueIndex >= this.task.items.length) {
-                    this.task.running = false;
-                    this.task.paused = false;
-                    this.log(`任务完成。在线: ${this.task.successCount}`);
-                    this.emit('complete');
-                    this.saveState();
-                } else {
-                    // Save state occasionally
-                    if (this.task.finished % 10 === 0) this.saveState();
-
-                    // Trigger next
+                    this.finishTask();
+                } else if (this.task.running) {
+                    // 继续处理
+                    // 使用 setImmediate 防止栈溢出，给 IO 喘息机会
                     setImmediate(() => this.processQueue());
                 }
             });
         }
+    }
+
+    async checkOne(item) {
+        if (!this.task.running) return;
+
+        let fullUrl = item.url;
+        let udpxy = item.udpxyUrl || this.task.params.udpxyUrl || '';
+
+        // 构造完整请求地址
+        if (fullUrl.startsWith('rtp://') && udpxy) {
+            fullUrl = `${udpxy}/rtp/${fullUrl.replace('rtp://', '')}`;
+        }
+
+        return new Promise(resolve => {
+            ffprobeCheck(fullUrl, (data) => {
+                const isSuccess = data.isAvailable;
+
+                if (isSuccess) {
+                    this.task.successCount++;
+                    const resultItem = {
+                        ...data,
+                        udpxyUrl: udpxy,
+                        multicastUrl: item.url, // 原始地址
+                        name: item.name || data.serviceName || '频道'
+                    };
+                    // 加入缓存，批量写入
+                    this.resultBuffer.push(resultItem);
+                } else {
+                    this.task.failCount++;
+                }
+
+                // 记录日志 (每 10 条或成功时)
+                if (isSuccess || this.task.finished % 10 === 0) {
+                    // this.log(`${isSuccess?'✅':'❌'} ${item.name||item.url}`);
+                }
+
+                // 阶段性保存状态 (每 20 条)
+                if (this.task.finished % 20 === 0) {
+                    this.saveState();
+                }
+
+                resolve();
+            });
+        });
+    }
+
+    async finishTask() {
+        this.task.running = false;
+        this.task.paused = false;
+        this.log(`任务全部完成。有效: ${this.task.successCount}, 无效: ${this.task.failCount}`);
+        await this.flushResults(); // 写入剩余结果
+        // 清除状态文件或标记为完成
+        this.task.type = ''; // 清除类型防止重启再次运行
+        this.saveState();
     }
 }
 

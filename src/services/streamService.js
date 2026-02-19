@@ -51,12 +51,52 @@ class StreamService {
         this.multicastList.push(stream);
     }
 
+    // [NEW] 批量添加流数据
+    async addStreamBatch(newStreams) {
+        if (!Array.isArray(newStreams) || newStreams.length === 0) return;
+
+        // 简单的去重逻辑：如果 URL 完全一致则覆盖，否则追加
+        // 为了性能，先建立当前 URL 映射
+        const urlMap = new Map();
+        this.multicastList.forEach((s, i) => {
+            const key = `${s.udpxyUrl}|${s.multicastUrl}`;
+            urlMap.set(key, i);
+        });
+
+        newStreams.forEach(ns => {
+            const key = `${ns.udpxyUrl}|${ns.multicastUrl}`;
+            if (urlMap.has(key)) {
+                const idx = urlMap.get(key);
+                this.multicastList[idx] = { ...this.multicastList[idx], ...ns };
+            } else {
+                this.multicastList.push(ns);
+            }
+        });
+
+        // 立即保存
+        await this.save();
+    }
+
     getSettings() {
         return this.settings;
     }
 
     updateSettings(newSettings) {
         this.settings = { ...this.settings, ...newSettings };
+    }
+
+    deleteStream(idx) {
+        if (!!this.multicastList[idx]) {
+            this.multicastList.splice(idx, 1);
+            this.save();
+            return true;
+        }
+        return false;
+    }
+
+    async clearStreams() {
+        this.multicastList = [];
+        await this.save();
     }
 }
 

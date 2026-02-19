@@ -1,10 +1,10 @@
 node_modules
 npm-debug.log
-data/*
-!data/.keep
 .git
 .github
-.env
-docker-compose.yml
-docker-compose-dev.yml
+.gitignore
 README.md
+LICENSE
+data/*
+!data/.gitkeep
+docker-compose.yml

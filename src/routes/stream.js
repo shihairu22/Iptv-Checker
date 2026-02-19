@@ -51,4 +51,20 @@ router.post('/check-stream', (req, res) => {
     });
 });
 
+// 删除单条
+router.delete('/stream/:index', (req, res) => {
+    const idx = parseInt(req.params.index, 10);
+    if (streamService.deleteStream(idx)) {
+        res.json({ success: true });
+    } else {
+        res.json({ success: false, message: '删除失败，索引无效' });
+    }
+});
+
+// 清空所有
+router.delete('/streams', async (req, res) => {
+    await streamService.clearStreams();
+    res.json({ success: true });
+});
+
 module.exports = router;

@@ -31,8 +31,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  # 强制使用小写镜像名
-  IMAGE_NAME: ${{ github.repository_owner }}/iptv-checker
 
 jobs:
   build-and-push:
@@ -44,6 +42,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up Image Name
+        run: echo "IMAGE_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3

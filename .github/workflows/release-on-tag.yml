@@ -82,10 +82,8 @@ jobs:
         id: meta
         run: |
           TAG="${{ steps.vars.outputs.tag }}"
-          OWNER="${{ github.repository_owner }}"
-          OWNER_LC=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+          REPO="$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')"
           STRIP=${TAG#v}
-          REPO=${OWNER_LC}/iptv-checker
           echo "tags=ghcr.io/$REPO:$TAG,ghcr.io/$REPO:$STRIP" >> $GITHUB_OUTPUT
       - name: Build and push to GHCR
         uses: docker/build-push-action@v5
@@ -106,14 +104,22 @@ jobs:
         if: ${{ env.ACR_USERNAME != '' && env.ACR_PASSWORD != '' }}
         run: |
           TAG="${{ steps.vars.outputs.tag }}"
-          OWNER="${{ github.repository_owner }}"
-          OWNER_LC=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+          REPO="$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')"
+          # 假设 Aliyun 上也使用相同的 owner/repo 结构，或者需要提取 repo name
+          # 这里保留原作者的 naming convention 但尝试动态化
+          # 原始逻辑是 OWNER_LC/iptv-checker
+          # 如果我们用 REPO (owner/repo)，则需要在 Aliyun 上有对应 namespace
+          
+          IMAGE_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          
           STRIP=${TAG#v}
-          IMAGE=iptv-checker
-          SRC1=ghcr.io/$OWNER_LC/$IMAGE:$TAG
-          SRC2=ghcr.io/$OWNER_LC/$IMAGE:$STRIP
-          DST1=registry.cn-hongkong.aliyuncs.com/$OWNER_LC/$IMAGE:$TAG
-          DST2=registry.cn-hongkong.aliyuncs.com/$OWNER_LC/$IMAGE:$STRIP
+          SRC1=ghcr.io/$REPO:$TAG
+          SRC2=ghcr.io/$REPO:$STRIP
+          
+          # Aliyun Target: registry.cn-hongkong.aliyuncs.com/OWNER/IMAGE
+          DST1=registry.cn-hongkong.aliyuncs.com/$OWNER_LC/$IMAGE_NAME:$TAG
+          DST2=registry.cn-hongkong.aliyuncs.com/$OWNER_LC/$IMAGE_NAME:$STRIP
           docker pull $SRC1
           docker tag $SRC1 $DST1
           docker push $DST1

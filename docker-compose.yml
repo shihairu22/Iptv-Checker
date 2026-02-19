@@ -1,6 +1,7 @@
 services:
   iptv-checker:
-    image: ghcr.io/cgg888/iptv-checker:latest
+    build: .
+    image: iptv-checker:local
     container_name: iptv-checker
     ports:
       - "3000:3000"
@@ -10,9 +11,14 @@ services:
     volumes:
       - ./data:/app/data
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
-      - iptv-network
+      - iptv-net
 
 networks:
-  iptv-network:
+  iptv-net:
     driver: bridge
