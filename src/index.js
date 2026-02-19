@@ -9,7 +9,7 @@ const authRouter = require('./routes/auth');
 const streamRouter = require('./routes/stream');
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 8848;
 
 // 日志工具 (可进一步迁移到 service)
 const logger = {

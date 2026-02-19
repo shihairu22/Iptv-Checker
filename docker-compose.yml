@@ -4,7 +4,7 @@ services:
     image: iptv-checker:local
     container_name: iptv-checker
     ports:
-      - "3000:3000"
+      - "8848:8848"
     environment:
       - NODE_ENV=production
       - TZ=Asia/Shanghai

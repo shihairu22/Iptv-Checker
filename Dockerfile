@@ -38,7 +38,7 @@ RUN mkdir -p /app/data && chown -R node:node /app
 USER node
 
 # 暴露端口
-EXPOSE 3000
+EXPOSE 8848
 
 # 设置环境变量
 ENV NODE_ENV=production

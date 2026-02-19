@@ -51,17 +51,23 @@ Iptv-Checker 是一款基于 Node.js + Express + ffprobe 的 IPTV 组播流检�
 ## 部署
 
 ### 方式一：Docker（推荐生产）
+
 Docker 运行（GitHub 镜像）：
+
 ```bash
 docker pull ghcr.io/cgg888/iptv-checker:latest
-docker run -d -p 3000:3000 --name iptv-checker ghcr.io/cgg888/iptv-checker:latest
+docker run -d -p 8848:8848 --name iptv-checker ghcr.io/cgg888/iptv-checker:latest
 ```
+
 Docker 运行（阿里云镜像）：
+
 ```bash
 docker pull registry.cn-hongkong.aliyuncs.com/cgg888/iptv-checker:latest
-docker run -d -p 3000:3000 --name iptv-checker registry.cn-hongkong.aliyuncs.com/cgg888/iptv-checker:latest
+docker run -d -p 8848:8848 --name iptv-checker registry.cn-hongkong.aliyuncs.com/cgg888/iptv-checker:latest
 ```
+
 Compose（生产）：
+
 ```yaml
 services:
   iptv-checker:
@@ -69,7 +75,7 @@ services:
     image: ghcr.io/cgg888/iptv-checker:latest
     container_name: iptv-checker
     ports:
-      - "3000:3000"
+      - "8848:8848"
     environment:
       - NODE_ENV=production
       - TZ=Asia/Shanghai
@@ -84,12 +90,16 @@ networks:
   iptv-network:
     driver: bridge
 ```
+
 提示：
+
 - 生产仅映射 data；不要映射 src/public 以免覆盖镜像内代码
 - 宿主机数据目录需可写；必要时设置 user: "1000:1000"
 
 ### 方式二：本地 Node.js（开发/轻量）
+
 环境准备：
+
 - Node.js 18+ 与 npm；ffmpeg（含 ffprobe）；git；curl/wget；现代浏览器
 
 ```bash
@@ -106,7 +116,8 @@ npm ci || npm install
 npm start
 ```
 
-#### 常见错误及解决办法：
+#### 常见错误及解决办法
+
 - **npm install 报错**：
   - 请检查 Node.js 是否正确安装，可用 `node -v` 和 `npm -v` 检查版本。
   - 若提示权限问题，Windows 请用管理员身份运行 PowerShell，Linux 可尝试 `sudo npm install`。
@@ -115,11 +126,12 @@ npm start
   - Linux：可用 `sudo apt install ffmpeg` 或 `sudo yum install ffmpeg` 安装。
   - 安装后在命令行输入 `ffprobe -version` 能正常输出版本信息即可。
 
-访问地址 http://localhost:3000（默认端口 3000，可在 src/index.js 修改）
+访问地址 <http://localhost:8848（默认端口> 8848，可在 src/index.js 修改）
 
-#### 常见错误及解决办法：
+#### 常见错误及解决办法
+
 - **端口被占用**：
-  - 报错 `EADDRINUSE: address already in use`，请更换端口或关闭占用 3000 端口的程序。
+  - 报错 `EADDRINUSE: address already in use`，请更换端口或关闭占用 8848 端口的程序。
 - **ffprobe 相关错误**：
   - 检查 ffprobe 是否安装并在 PATH 中。
   - 检查防火墙或杀毒软件是否拦截 ffprobe。
@@ -127,23 +139,26 @@ npm start
   - 请确保 UDPXY 服务已启动，且 Web 页面填写的 UDPXY 地址正确可访问。
 
 ### 5. 访问 Web 页面
-- 启动后在浏览器访问：http://localhost:3000
-- 局域网其他设备可通过本机 IP 访问（如 http://192.168.1.100:3000），需保证防火墙放行 3000 端口。
+
+- 启动后在浏览器访问：<http://localhost:8848>
+- 局域网其他设备可通过本机 IP 访问（如 <http://192.168.1.100:8848> ），需保证防火墙放行 8848 端口。
 
 ### 6. 配置 UDPXY
-- 请确保本地或局域网内有可用的 UDPXY 服务，并在页面填写 UDPXY 地址（如：http://192.168.88.1:8333）。
+
+- 请确保本地或局域网内有可用的 UDPXY 服务，并在页面填写 UDPXY 地址（如：<http://192.168.88.1:8333> ）。
 - UDPXY 是 IPTV 组播转 HTTP 的服务，需自行搭建。
 
 ---
 
 ### 方式三：Docker 开发模式（源码映射）
+
 ```yaml
 services:
   iptv-checker-dev:
     build: .
     container_name: iptv-checker-dev
     ports:
-      - "3000:3000"
+      - "8848:8848"
     environment:
       - NODE_ENV=development
       - TZ=Asia/Shanghai
@@ -154,11 +169,13 @@ services:
       - ./.git:/app/.git
     restart: unless-stopped
 ```
+
 注意：Windows 中文路径可能导致卷挂载异常，建议使用英文路径（如 C:\Work\iptv-checker）
 
 ## Linux 服务器一键部署
 
 Debian/Ubuntu（systemd 服务）：
+
 ```bash
 #!/usr/bin/env bash
 set -e
@@ -194,6 +211,7 @@ sudo systemctl status iptv-checker --no-pager
 ```
 
 CentOS/RHEL（systemd 服务）：
+
 ```bash
 #!/usr/bin/env bash
 set -e
@@ -254,8 +272,7 @@ sudo systemctl status iptv-checker --no-pager
   - 列表：展示所有版本及数量
 - 接口对应
   - /api/persist/save、/api/persist/list、/api/persist/load-version、/api/persist/delete-version、/api/persist/load、/api/persist/delete
- - 启动行为：若 /data/streams.json 不存在，将自动加载 /data 中最新的 streams-YYYYMMDD-HHMMSS.json 版本文件
-
+- 启动行为：若 /data/streams.json 不存在，将自动加载 /data 中最新的 streams-YYYYMMDD-HHMMSS.json 版本文件
 
 ## 数据文件说明（/data）
 
@@ -283,39 +300,41 @@ sudo systemctl status iptv-checker --no-pager
 - 跨域播放：调试 HLS 可使用 /api/proxy/stream
 - PotPlayer 播放：点击编辑弹窗按钮或使用 potplayer://play?url=... schema
 
-
 #### 💡 常见问题
-1. 🔄 如果端口被占用，修改端口映射（例如："8080:3000"）
+
+1. 🔄 如果端口被占用，修改端口映射（例如："8080:8848"）
 2. 🔒 如果拉取失败，检查 Docker 登录状态
 3. 🌐 国内用户如果 GitHub 镜像拉取较慢，建议切换到阿里云镜像
 4. 📋 查看实时日志：`docker-compose logs -f`
 5. 🔄 重启容器：`docker-compose restart`
 6. ⬆️ 更新镜像：`docker-compose pull && docker-compose up -d`
 
-
-
 #### 6 注意事项
+
 - ✅ 确保系统已安装 Docker 和 Docker Compose
 - 🔐 使用 GitHub 镜像源需要先登录 ghcr.io
 - 🚀 国内用户建议使用阿里云镜像源，速度更快
-- 🔌 容器默认监听 3000 端口
+- 🔌 容器默认监听 8848 端口
 - 📦 镜像大小约 200MB，采用 Alpine Linux 基础镜像
 - 🎥 内置 ffmpeg，无需额外安装
 - 🔒 如果使用 GitHub Container Registry，首次拉取可能需要登录：
+
   ```bash
   echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
   ```
+
 - 📁 容器内的 `/app/data` 和 `/app/logs` 目录已映射到宿主机，数据将被持久化
 - 🕒 默认时区设置为 `Asia/Shanghai`，可通过环境变量 `TZ` 修改
 - 🔄 容器配置了自动重启策略（unless-stopped）
-- 🌐 应用默认监听 3000 端口，可根据需要修改映射端口
+- 🌐 应用默认监听 8848 端口，可根据需要修改映射端口
 
 #### 7 常见问题解决
+
 - 📡 **无法拉取镜像**：
   - GitHub 镜像拉取慢：尝试使用阿里云镜像
   - 网络问题：检查网络连接和防火墙设置
 - 🚫 **容器无法启动**：
-  - 检查端口是否被占用：`netstat -nltp | grep 3000`
+  - 检查端口是否被占用：`netstat -nltp | grep 8848`
   - 查看容器日志：`docker logs iptv-checker`
 - 💾 **数据持久化问题**：
   - 确保挂载目录存在且有正确的权限
@@ -324,7 +343,9 @@ sudo systemctl status iptv-checker --no-pager
 ---
 
 ## 版本历史
+
 ### v1.2.2 (2026-02-18)
+
 - EPG/回看：LIVE 节目直接调用单播完整地址；复制栏显示原始地址，网页播放走代理（/api/proxy/hls 或 /api/proxy/stream）；组播频道在 LIVE 时自动匹配单播候选或基于回放基址拼接单播参数（zte_offset=30、ispcode=2、starttime=$单播），显著提升兼容性与成功率
 - EPG 标题行新增“上一个频道/停止/下一个频道”按钮，支持在弹窗内切换频道与一键停止播放
 - 状态联动优化：LIVE 点击显示“正在直播”，回看点击显示“正在回看”，二者互斥展示
@@ -332,6 +353,7 @@ sudo systemctl status iptv-checker --no-pager
 - 版本号更新至 1.2.2
 
 ### v1.2.1 (2026-02-18)
+
 - TXT 导出支持分组：输出“分组名,#genre#”，其后为“频道名,地址”
 - 导出弹窗文案更新：明确 TXT 为分组格式
 - 接口弹窗布局优化：Token 固定第一行；第二行按“状态→范围→单播协议→回放格式”顺序展示
@@ -340,12 +362,14 @@ sudo systemctl status iptv-checker --no-pager
 - 版本号更新至 1.2.1
 
 ### v1.2.0 (2026-02-18)
+
 - 新增接口弹窗下拉：单播协议（HTTP/RTSP）、回放格式预设
 - 扩展导出：/api/export/m3u 支持 proto=http|rtsp 与多种 fmt（iso8601、npt、rtsp_range、playseek、startend14、beginend14、unix_s、unix_ms），保留酷9、mytv逻辑不变
 - 调整布局：接口弹窗分两行，第一行 Token；第二行 状态→范围→单播协议→回放格式
 - 版本号更新至 1.2.0
 
 ### v1.1.0 (2026-02-18)
+
 - 🔐 新增登录鉴权系统：
   - 支持账号密码登录，默认 admin/admin
   - 增加图形验证码（svg-captcha）防止爆破
@@ -364,6 +388,7 @@ sudo systemctl status iptv-checker --no-pager
   - 调整版本弹窗为居中卡片式设计
 
 ### v1.0.1 (2026-02-17)
+
 - 🔐 外网导出支持 token 验证，未携带或错误 token 拒绝访问
 - 🐛 修复导出接口异常（TXT ordered 未定义、M3U udpxyServers 未定义）
 - 🖼️ 编辑频道弹窗新增台标预览；▶️ 增加 PotPlayer 播放按钮
@@ -374,6 +399,7 @@ sudo systemctl status iptv-checker --no-pager
 - 💾 新增版本持久化能力：支持保存、加载、删除版本及版本列表接口
 
 ### v1.0.0 (2025-05-25)
+
 - 🎉 首次发布
 - ✨ 支持批量检测 IPTV 组播流
 - 🚀 实现 Docker 容器化部署
@@ -385,14 +411,17 @@ sudo systemctl status iptv-checker --no-pager
 ---
 
 ## 侵权说明
+
 本项目仅供学习与交流，严禁用于任何商业用途或非法用途。若涉及版权或侵权问题，请联系作者及时删除相关内容。
 
 ## 免责说明
+
 本软件为开源项目，作者不对因使用本软件造成的任何直接或间接损失承担责任。使用本软件即视为同意本声明。
 
 ---
 
 ## 📌 其他说明
+
 - 💻 支持 Windows、Linux、Docker 部署
 - ⚙️ 如需自定义端口，请修改 `src/index.js` 中的 `port` 变量
 - 💾 如需持久化存储，可自行扩展存储逻辑
