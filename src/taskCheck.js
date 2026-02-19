@@ -310,7 +310,11 @@ class TaskManager extends EventEmitter {
             }
 
             const worker = new Worker(path.join(__dirname, 'checkWorker.js'), {
-                workerData: { url: item.url, udpxyUrl: item.udpxyUrl || this.task.params.udpxyUrl }
+                workerData: {
+                    url: item.url,
+                    udpxyUrl: item.udpxyUrl || this.task.params.udpxyUrl,
+                    retry: this.task.params.retry || 0
+                }
             });
 
             worker.on('message', (msg) => {

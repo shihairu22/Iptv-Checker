@@ -12,15 +12,32 @@ const { ffprobeCheck } = require('./ffprobe');
 
 if (workerData && workerData.url) {
     // 方式 A: 每次 new Worker 传入 workerData
-    const { url, udpxyUrl } = workerData;
+    const { url, udpxyUrl, retry = 0 } = workerData;
     let fullUrl = url;
     if (fullUrl.startsWith('rtp://') && udpxyUrl) {
         fullUrl = `${udpxyUrl}/rtp/${fullUrl.replace('rtp://', '')}`;
     }
 
-    ffprobeCheck(fullUrl, (data) => {
-        parentPort.postMessage({ success: true, data });
-    });
+    let attempts = 0;
+    const maxAttempts = 1 + (parseInt(retry) || 0);
+
+    const performCheck = () => {
+        attempts++;
+        ffprobeCheck(fullUrl, (data) => {
+            if (data.isAvailable) {
+                parentPort.postMessage({ success: true, data });
+            } else {
+                if (attempts < maxAttempts) {
+                    // Retry after delay (e.g. 1000ms)
+                    setTimeout(performCheck, 1000);
+                } else {
+                    parentPort.postMessage({ success: true, data });
+                }
+            }
+        });
+    };
+
+    performCheck();
 } else {
     // 方式 B: 复用 Worker
     parentPort.on('message', (task) => {

@@ -188,29 +188,32 @@
                             </div>
                             <div class="card-body">
                                 <div class="row g-2 align-items-end mb-3">
-                                    <div class="col-8">
+                                    <div class="col-6">
                                         <label class="form-label small text-muted">组播CIDR生成</label>
                                         <div class="input-group">
                                             <input type="text" class="form-control addr-mono" id="cidrInput"
                                                 placeholder="239.x.x.x/24">
-                                            <input type="text" class="form-control" id="portInput"
-                                                placeholder="端口 如8000,9306,9400-9420" style="max-width: 220px;"
-                                                title="支持逗号分隔和范围格式，如：8000,9306,9400-9420">
+                                            <input type="text" class="form-control" id="portInput" placeholder="端口"
+                                                style="max-width: 140px;" title="支持逗号分隔和范围格式">
                                         </div>
                                     </div>
-                                    <div class="col-4">
+                                    <div class="col-3">
                                         <label class="form-label small text-muted">并发数</label>
                                         <select class="form-select" id="concurrencySelect">
                                             <option value="1">1</option>
-                                            <option value="2">2</option>
-                                            <option value="3">3</option>
                                             <option value="5">5</option>
                                             <option value="10" selected>10</option>
-                                            <option value="15">15</option>
                                             <option value="20">20</option>
-                                            <option value="30">30</option>
-                                            <option value="40">40</option>
                                             <option value="50">50</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-3">
+                                        <label class="form-label small text-muted">失败重试</label>
+                                        <select class="form-select" id="retrySelect">
+                                            <option value="0" selected>不重试</option>
+                                            <option value="1">1次</option>
+                                            <option value="2">2次</option>
+                                            <option value="3">3次</option>
                                         </select>
                                     </div>
                                 </div>
@@ -710,6 +713,7 @@
             }
 
             const concurrency = document.getElementById('concurrencySelect') ? document.getElementById('concurrencySelect').value : 10;
+            const retry = document.getElementById('retrySelect') ? document.getElementById('retrySelect').value : 0;
 
             try {
                 const response = await fetch('/api/task/start', {
@@ -719,7 +723,8 @@
                         type: 'batch',
                         udpxyUrl,
                         batchText,
-                        concurrency
+                        concurrency,
+                        retry
                     }),
                 });
                 const data = await response.json();
