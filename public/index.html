@@ -757,17 +757,15 @@
         document.getElementById('clearAllBtn').onclick = async function () {
             showCenterConfirm('确定要清空所有检测结果吗？', async function (ok) {
                 if (!ok) return;
-                await fetch('/api/streams', { method: 'DELETE' }); // 需要后端支持 DELETE /api/streams 或保留原逻辑
-                // 由于后端路由变动，这里可能需要确认 stream.js 是否实现了清空接口。
-                // 上文 streamService 没提供清空方法，我们可以简单实现一个 reset
-                // 鉴于时间，这里假设用户只需清空前端显示，或者需要补充后端接口。
-                // *补充*：检查 stream.js 路由，发现没有 DELETE /api/streams。
-                // 为保证功能完整，我们稍后在 stream.js 补上。
-
-                // 临时仅前端清空，并调用一个设想的接口
-                // await fetch('/api/streams/clear', { method: 'POST' }); 
-
-                getStreams();
+                if (!ok) return;
+                try {
+                    await fetch('/api/streams', { method: 'DELETE' });
+                    getStreams();
+                    showProgress(0, 0, '已清空所有结果');
+                } catch (e) {
+                    console.error(e);
+                    showCenterConfirm('清空失败', null, true);
+                }
             });
         };
         // 组播检测、检测结果标题字号风格统一

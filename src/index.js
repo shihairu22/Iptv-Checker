@@ -69,8 +69,6 @@ async function startServer() {
         app.get('/results', (req, res) => res.sendFile(path.join(__dirname, '../public/results.html')));
 
         // 全局错误处理
-        const socketIo = require('socket.io');
-        const taskManager = require('./taskCheck');
 
         // ... (省略中间代码) ...
 
