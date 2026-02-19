@@ -98,6 +98,34 @@ class StreamService {
         this.multicastList = [];
         await this.save();
     }
+
+    getStats() {
+        const total = this.multicastList.length;
+        let online = 0;
+        let offline = 0;
+        const resolutions = {};
+        const groups = {};
+
+        this.multicastList.forEach(s => {
+            if (s.isAvailable) online++; else offline++;
+
+            // Resolution stats
+            const res = s.resolution || 'Unknown';
+            resolutions[res] = (resolutions[res] || 0) + 1;
+
+            // Group stats
+            const grp = s.groupTitle || 'Default';
+            groups[grp] = (groups[grp] || 0) + 1;
+        });
+
+        return {
+            total,
+            online,
+            offline,
+            resolutions,
+            groups
+        };
+    }
 }
 
 module.exports = new StreamService();

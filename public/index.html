@@ -9,6 +9,7 @@
         href="data:image/svg+xml,<svg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27><rect width=%2716%27 height=%2716%27 rx=%273%27 fill=%27%236f42c1%27/></svg>">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="css/custom.css" rel="stylesheet">
     <script>
         // 登录检查
@@ -87,6 +88,31 @@
                 </div>
             </div>
         </div>
+
+        <!-- 统计图表区域 -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <h5 class="card-title text-center text-muted mb-3" style="font-size: 1rem;">检测结果概览</h5>
+                        <div style="height: 250px; position: relative;">
+                            <canvas id="statusChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <h5 class="card-title text-center text-muted mb-3" style="font-size: 1rem;">分辨率分布</h5>
+                        <div style="height: 250px; position: relative;">
+                            <canvas id="resolutionChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="main-card">
             <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
                 <h5 class="mb-0 fw-bold text-dark"><i class="bi bi-gear-fill me-2"></i>检测配置</h5>
@@ -487,6 +513,7 @@
                 const data = await response.json();
                 allStreams = data.streams || [];
                 updateStatsAndDisplay();
+                initDashboard(); // Update charts
             } catch (error) {
                 console.error('Error:', error);
             }
@@ -582,6 +609,82 @@
         // let pollTimer = null;
         // async function startTaskPolling() { ... }
         // startTaskPolling();
+
+        // 图表实例
+        let statusChartInstance = null;
+        let resolutionChartInstance = null;
+
+        async function initDashboard() {
+            try {
+                const res = await fetch('/api/stats');
+                const data = await res.json();
+                if (data.success && data.stats) {
+                    renderCharts(data.stats);
+                }
+            } catch (e) {
+                console.error("Failed to load stats", e);
+            }
+        }
+
+        function renderCharts(stats) {
+            // 1. 状态饼图
+            const ctxStatus = document.getElementById('statusChart').getContext('2d');
+            if (statusChartInstance) statusChartInstance.destroy();
+
+            statusChartInstance = new Chart(ctxStatus, {
+                type: 'doughnut',
+                data: {
+                    labels: ['在线', '离线'],
+                    datasets: [{
+                        data: [stats.online, stats.offline],
+                        backgroundColor: ['#28a745', '#dc3545'],
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+
+            // 2. 分辨率柱状图 (取前10个)
+            const ctxRes = document.getElementById('resolutionChart').getContext('2d');
+            if (resolutionChartInstance) resolutionChartInstance.destroy();
+
+            // 排序分辨率
+            const resEntries = Object.entries(stats.resolutions || {}).sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+            resolutionChartInstance = new Chart(ctxRes, {
+                type: 'bar',
+                data: {
+                    labels: resEntries.map(e => e[0]),
+                    datasets: [{
+                        label: '数量',
+                        data: resEntries.map(e => e[1]),
+                        backgroundColor: '#6f42c1',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, grid: { display: false } },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+        }
+
+        // 页面加载后初始化图表
+        initDashboard();
 
         // 批量检测（提交给后台）
         async function batchCheckStreams(udpxyUrl, batchText) {

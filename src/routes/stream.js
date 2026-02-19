@@ -12,6 +12,11 @@ router.get('/streams', (req, res) => {
 // 任务状态
 router.get('/task/status', (req, res) => res.json(taskManager.getStatus()));
 
+// 统计信息
+router.get('/stats', (req, res) => {
+    res.json({ success: true, stats: streamService.getStats() });
+});
+
 // 启动任务
 router.post('/task/start', (req, res) => {
     res.json({ success: taskManager.start(req.body) });
