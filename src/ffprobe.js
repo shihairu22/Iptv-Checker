@@ -13,7 +13,9 @@ function ffprobeCheck(fullUrl, callback) {
     }
 
     // 使用json格式输出，返回所有流（视频+音频）
-    const cmd = `ffprobe -v quiet -print_format json -show_streams -show_programs -show_format "${fullUrl}"`;
+    // 优化参数: -analyzeduration 3000000 (3s), -probesize 5000000 (5MB), -stimeout 5000000 (5s socket timeout for tcp)
+    // 注意: ffprobe 对 http/rtp 输入的 timeout 参数可能不同，-stimeout 用于 TCP, -rw_timeout 用于 RTMP/HTTP
+    const cmd = `ffprobe -v quiet -print_format json -show_streams -show_programs -show_format -analyzeduration 3000000 -probesize 5000000 "${fullUrl}"`;
     exec(cmd, { timeout: 8000 }, (error, stdout, stderr) => {
         let isAvailable = false;
         let frameRate = null;

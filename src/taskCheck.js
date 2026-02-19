@@ -5,7 +5,7 @@ const { ffprobeCheck } = require('./ffprobe');
 const persistence = require('./services/persistenceService');
 const streamService = require('./services/streamService');
 const packageJson = require('../package.json');
-const { Worker } = require('worker_threads');
+// const { Worker } = require('worker_threads'); // Removed Worker
 
 const STATE_FILE = 'current_task.json';
 const LOG_SIZE = 50;
@@ -37,11 +37,11 @@ class TaskManager extends EventEmitter {
             logs: [],
             concurrency: 5
         };
-        this.activeWorkers = 0;
+        // this.activeWorkers = 0; // Not used
         this.queue = null; // PQueue instance
         this.resultBuffer = [];
         this.io = null;
-        this.workers = new Set(); // Track active workers
+        // this.workers = new Set(); // Removed
 
         // 初始化加载状态
         this.init().catch(err => console.error('Task init failed:', err));
@@ -85,12 +85,9 @@ class TaskManager extends EventEmitter {
             this.regenerateItems();
 
             // 恢复进度
-            this.queueIndex = this.task.finished;
-            this.activeWorkers = 0;
-
             if (this.task.running) {
                 this.task.running = true;
-                this.log('服务重启，正在恢复之前的扫描任务 (Worker Mode)...');
+                this.log('服务重启，正在恢复之前的扫描任务 (Direct Mode)...');
 
                 // 恢复队列
                 if (this.queue) {
@@ -101,7 +98,7 @@ class TaskManager extends EventEmitter {
 
                 // 跳过已完成的
                 for (let i = this.task.finished; i < this.task.items.length; i++) {
-                    this.queue.add(() => this.runWorker(this.task.items[i]));
+                    this.queue.add(() => this.runItem(this.task.items[i]));
                 }
             } else {
                 this.log('服务重启，任务处于暂停状态');
@@ -232,7 +229,7 @@ class TaskManager extends EventEmitter {
 
         this.task.type = params.type || 'batch';
         this.task.params = params;
-        this.task.concurrency = parseInt(params.concurrency) || 5;
+        this.task.concurrency = parseInt(params.concurrency) || 20;
         this.task.startTime = Date.now();
         this.task.finished = 0;
         this.task.successCount = 0;
@@ -252,12 +249,12 @@ class TaskManager extends EventEmitter {
         this.task.running = true;
         this.task.paused = false;
 
-        this.log(`任务启动，共 ${this.task.total} 条，并发 ${this.task.concurrency} (Worker Mode)`);
+        this.log(`任务启动，共 ${this.task.total} 条，并发 ${this.task.concurrency} (Direct Mode)`);
         this.saveState();
 
         // 添加任务到队列
         this.task.items.forEach(item => {
-            this.queue.add(() => this.runWorker(item));
+            this.queue.add(() => this.runItem(item));
         });
 
         return true;
@@ -268,7 +265,7 @@ class TaskManager extends EventEmitter {
 
         this.task.running = true;
         this.task.paused = false;
-        this.log('任务恢复执行 (Worker Mode)...');
+        this.log('任务恢复执行 (Direct Mode)...');
 
         // 重新初始化队列（安全起见）
         if (this.queue) {
@@ -279,7 +276,7 @@ class TaskManager extends EventEmitter {
 
         // 只添加未完成的任务
         for (let i = this.task.finished; i < this.task.items.length; i++) {
-            this.queue.add(() => this.runWorker(this.task.items[i]));
+            this.queue.add(() => this.runItem(this.task.items[i]));
         }
 
         this.saveState();
@@ -296,70 +293,75 @@ class TaskManager extends EventEmitter {
             this.queue.clear();
         }
 
-        // 终止所有正在运行的 Worker
-        for (const worker of this.workers) {
-            worker.terminate().catch(() => { });
-        }
-        this.workers.clear();
+        // Direct Mode 下不需要 terminate workers，p-queue clear 即可阻止新任务。
+        // 正在运行的任务会继续完成（无法强制 kill exec，除非记录 child process 引用，暂时不复杂化）
 
-        this.log('任务已手动暂停，正在运行的任务已取消');
+        this.log('任务已手动暂停，正在运行的任务稍后停止');
         this.saveState();
     }
 
-    // Worker 执行包装器
-    runWorker(item) {
+    // 直接执行逻辑（替代 Worker）
+    runItem(item) {
         return new Promise((resolve) => {
             if (!this.task.running) {
                 resolve();
                 return;
             }
 
-            const worker = new Worker(path.join(__dirname, 'checkWorker.js'), {
-                workerData: {
-                    url: item.url,
-                    udpxyUrl: item.udpxyUrl || this.task.params.udpxyUrl,
-                    retry: this.task.params.retry || 0
-                }
-            });
+            const { url, udpxyUrl } = item;
+            let fullUrl = url;
+            // 如果是 rtp 且有 udpxy，则转换
+            if (fullUrl.startsWith('rtp://') && udpxyUrl) {
+                fullUrl = `${udpxyUrl}/rtp/${fullUrl.replace('rtp://', '')}`;
+            }
 
-            this.workers.add(worker);
+            // 失败重试逻辑
+            const maxAttempts = 1 + (parseInt(this.task.params.retry) || 0);
+            let attempts = 0;
 
-            worker.on('message', (msg) => {
-                if (msg.success) {
-                    this.handleResult(item, msg.data);
-                } else {
-                    this.task.failCount++;
-                }
-            });
+            const executeParamCheck = () => {
+                attempts++;
 
-            worker.on('error', (err) => {
-                if (!this.task.paused) {
-                    this.task.failCount++;
-                }
-            });
-
-            worker.on('exit', (code) => {
-                this.workers.delete(worker);
-
-                // 如果任务已暂停，说明是被强制终止的 (或者在暂停瞬间自然退出的)
-                // 此时不计入 finished，以便 Resume 时重试
-                if (this.task.paused) {
+                // 如果任务中途暂停，停止重试
+                if (!this.task.running) {
                     resolve();
                     return;
                 }
 
-                this.task.finished++;
-                // 阶段性保存状态 (每 20 条)
-                if (this.task.finished % 20 === 0) {
-                    this.saveState();
-                }
+                ffprobeCheck(fullUrl, (data) => {
+                    if (data.isAvailable) {
+                        this.handleResult(item, data);
+                        this.finalizeItem();
+                        resolve();
+                    } else {
+                        if (attempts < maxAttempts && this.task.running) {
+                            // Retry delay
+                            setTimeout(executeParamCheck, 1000);
+                        } else {
+                            this.task.failCount++;
+                            this.finalizeItem();
+                            resolve();
+                        }
+                    }
+                });
+            };
 
-                if (this.task.finished >= this.task.total) {
-                    this.finishTask();
-                }
-                resolve();
-            });
+            executeParamCheck();
         });
+    }
+
+    finalizeItem() {
+        if (this.task.paused) return; // 暂停时不计数，留给 resume
+
+        this.task.finished++;
+        // 阶段性保存状态 (每 20 条)
+        if (this.task.finished % 20 === 0) {
+            this.saveState();
+        }
+
+        if (this.task.finished >= this.task.total) {
+            this.finishTask();
+        }
     }
 
     handleResult(item, data) {
@@ -376,7 +378,7 @@ class TaskManager extends EventEmitter {
             };
             this.resultBuffer.push(resultItem);
         } else {
-            this.task.failCount++;
+            // failCount already incremented in runItem
         }
     }
 
