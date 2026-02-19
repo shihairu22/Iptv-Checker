@@ -1318,7 +1318,7 @@
             barWrap.style.display = '';
             let percent = total ? Math.round(done / total * 100) : 0;
             bar.style.width = percent + '%';
-            bar.innerText = `${percent}% | 进度: ${done}/${total} | ${status || ''}`;
+            bar.innerText = `${percent}% | 已检测: ${done}/${total} | ${status || ''}`;
             showStatusInfo(status || '');
         }
         function hideProgress() {
