@@ -7,6 +7,27 @@ const streamService = require('./services/streamService');
 const packageJson = require('../package.json');
 
 const STATE_FILE = 'current_task.json';
+const PQueue = require('p-queue').default; // p-queue v8+ is ESM, but if we are in CJS, we might need dynamic import or older version.
+// Checking package.json... if using "type": "commonjs" (default), we need to ensure p-queue version is compatible.
+// If p-queue is installed as latest (8+), it is ESM only.
+// Let's assume we might need dynamic import or use an older version.
+// For now, let's try standard require. If it fails, we will fix it.
+// Actually, let's use dynamic import in init to be safe, or just use `require('p-queue')` if it's an older version.
+// Wait, user installed `p-queue` just now. It is likely v8.
+// Node.js support dynamic import().
+// Let's use a workaround:
+let PQueue;
+(async () => {
+    try {
+        const m = await import('p-queue');
+        PQueue = m.default;
+    } catch (e) {
+        console.error('Failed to import p-queue:', e);
+    }
+})();
+
+const { Worker } = require('worker_threads');
+
 const LOG_SIZE = 50;
 
 class TaskManager extends EventEmitter {
@@ -27,16 +48,21 @@ class TaskManager extends EventEmitter {
             concurrency: 5
         };
         this.activeWorkers = 0;
-        this.queueIndex = 0;
-        this.resultBuffer = []; // 暂存检查结果，批量写入
+        this.queue = null; // PQueue instance
+        this.resultBuffer = [];
 
         // 初始化加载状态
         this.init().catch(err => console.error('Task init failed:', err));
     }
 
     async init() {
+        // Wait for PQueue to be loaded
+        while (!PQueue) {
+            await new Promise(r => setTimeout(r, 100));
+        }
+
         await this.loadState();
-        setInterval(() => this.flushResults(), 3000); // 定时将结果写入 disk
+        setInterval(() => this.flushResults(), 3000);
     }
 
     log(msg) {
@@ -68,9 +94,20 @@ class TaskManager extends EventEmitter {
             this.activeWorkers = 0;
 
             if (this.task.running) {
-                this.task.running = true; // 保持运行状态
-                this.log('服务重启，正在恢复之前的扫描任务...');
-                this.processQueue();
+                this.task.running = true;
+                this.log('服务重启，正在恢复之前的扫描任务 (Worker Mode)...');
+
+                // 恢复队列
+                if (this.queue) {
+                    this.queue.pause();
+                    this.queue.clear();
+                }
+                this.queue = new PQueue({ concurrency: this.task.concurrency });
+
+                // 跳过已完成的
+                for (let i = this.task.finished; i < this.task.items.length; i++) {
+                    this.queue.add(() => this.runWorker(this.task.items[i]));
+                }
             } else {
                 this.log('服务重启，任务处于暂停状态');
             }
@@ -209,14 +246,24 @@ class TaskManager extends EventEmitter {
 
         this.regenerateItems();
 
-        this.queueIndex = 0;
-        this.activeWorkers = 0;
+        // 初始化队列
+        if (this.queue) {
+            this.queue.pause();
+            this.queue.clear();
+        }
+        this.queue = new PQueue({ concurrency: this.task.concurrency });
+
         this.task.running = true;
         this.task.paused = false;
 
-        this.log(`任务启动，共 ${this.task.total} 条，并发 ${this.task.concurrency}`);
+        this.log(`任务启动，共 ${this.task.total} 条，并发 ${this.task.concurrency} (Worker Mode)`);
         this.saveState();
-        this.processQueue();
+
+        // 添加任务到队列
+        this.task.items.forEach(item => {
+            this.queue.add(() => this.runWorker(item));
+        });
+
         return true;
     }
 
@@ -224,8 +271,66 @@ class TaskManager extends EventEmitter {
         if (!this.task.running) return;
         this.task.running = false;
         this.task.paused = true;
+        if (this.queue) {
+            this.queue.pause();
+            this.queue.clear();
+        }
         this.log('任务已手动暂停');
         this.saveState();
+    }
+
+    // Worker 执行包装器
+    runWorker(item) {
+        return new Promise((resolve) => {
+            if (!this.task.running) {
+                resolve();
+                return;
+            }
+
+            const worker = new Worker(path.join(__dirname, 'checkWorker.js'), {
+                workerData: { url: item.url, udpxyUrl: item.udpxyUrl || this.task.params.udpxyUrl }
+            });
+
+            worker.on('message', (msg) => {
+                if (msg.success) {
+                    this.handleResult(item, msg.data);
+                } else {
+                    this.task.failCount++;
+                }
+            });
+
+            worker.on('error', (err) => {
+                this.task.failCount++;
+            });
+
+            worker.on('exit', (code) => {
+                this.task.finished++;
+                // 阶段性保存状态 (每 20 条)
+                if (this.task.finished % 20 === 0) {
+                    this.saveState();
+                }
+
+                if (this.task.finished >= this.task.total) {
+                    this.finishTask();
+                }
+                resolve();
+            });
+        });
+    }
+
+    handleResult(item, data) {
+        if (data.isAvailable) {
+            this.task.successCount++;
+            const resultItem = {
+                ...data,
+                udpxyUrl: item.udpxyUrl || this.task.params.udpxyUrl,
+                multicastUrl: item.url,
+                name: item.name || data.serviceName || '频道'
+            };
+            this.resultBuffer.push(resultItem);
+        } else {
+            this.task.failCount++;
+        }
     }
 
     getStatus() {
@@ -249,74 +354,7 @@ class TaskManager extends EventEmitter {
         }
     }
 
-    processQueue() {
-        if (!this.task.running || this.task.paused) return;
 
-        // 填充 worker 直到达到并发限制
-        while (this.activeWorkers < this.task.concurrency && this.queueIndex < this.task.items.length) {
-            const item = this.task.items[this.queueIndex];
-            this.queueIndex++;
-            this.activeWorkers++;
-
-            this.checkOne(item).then(() => {
-                this.activeWorkers--;
-                this.task.finished++;
-
-                // 检查完成
-                if (this.activeWorkers === 0 && this.queueIndex >= this.task.items.length) {
-                    this.finishTask();
-                } else if (this.task.running) {
-                    // 继续处理
-                    // 使用 setImmediate 防止栈溢出，给 IO 喘息机会
-                    setImmediate(() => this.processQueue());
-                }
-            });
-        }
-    }
-
-    async checkOne(item) {
-        if (!this.task.running) return;
-
-        let fullUrl = item.url;
-        let udpxy = item.udpxyUrl || this.task.params.udpxyUrl || '';
-
-        // 构造完整请求地址
-        if (fullUrl.startsWith('rtp://') && udpxy) {
-            fullUrl = `${udpxy}/rtp/${fullUrl.replace('rtp://', '')}`;
-        }
-
-        return new Promise(resolve => {
-            ffprobeCheck(fullUrl, (data) => {
-                const isSuccess = data.isAvailable;
-
-                if (isSuccess) {
-                    this.task.successCount++;
-                    const resultItem = {
-                        ...data,
-                        udpxyUrl: udpxy,
-                        multicastUrl: item.url, // 原始地址
-                        name: item.name || data.serviceName || '频道'
-                    };
-                    // 加入缓存，批量写入
-                    this.resultBuffer.push(resultItem);
-                } else {
-                    this.task.failCount++;
-                }
-
-                // 记录日志 (每 10 条或成功时)
-                if (isSuccess || this.task.finished % 10 === 0) {
-                    // this.log(`${isSuccess?'✅':'❌'} ${item.name||item.url}`);
-                }
-
-                // 阶段性保存状态 (每 20 条)
-                if (this.task.finished % 20 === 0) {
-                    this.saveState();
-                }
-
-                resolve();
-            });
-        });
-    }
 
     async finishTask() {
         this.task.running = false;
