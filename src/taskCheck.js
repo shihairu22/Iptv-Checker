@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const EventEmitter = require('events');
 const { ffprobeCheck } = require('./ffprobe');
+const { checkNetwork } = require('./networkCheck');
 const persistence = require('./services/persistenceService');
 const streamService = require('./services/streamService');
 const packageJson = require('../package.json');
@@ -319,7 +320,7 @@ class TaskManager extends EventEmitter {
             const maxAttempts = 1 + (parseInt(this.task.params.retry) || 0);
             let attempts = 0;
 
-            const executeParamCheck = () => {
+            const executeParamCheck = async () => {
                 attempts++;
 
                 // 如果任务中途暂停，停止重试
@@ -328,6 +329,32 @@ class TaskManager extends EventEmitter {
                     return;
                 }
 
+                // 1. Pre-flight Network Check (Fast Fail)
+                const isNetAlive = await checkNetwork(fullUrl);
+
+                // Double check running state after await
+                if (!this.task.running) {
+                    resolve();
+                    return;
+                }
+
+                if (!isNetAlive) {
+                    // 网络不可达，直接失败，不走 ffprobe，也不重试 (网络都不通，重试大概率没用且浪费时间)
+                    // 除非 retry 是针对不稳定网络的? 
+                    // 这里策略：如果是 "dead link" (端口关/无组播流)，直接判定无效
+                    // 为了保守起见，如果还有重试次数，也可以 continue。但为了性能，我们假设 1s 收不到包就是死的。
+                    if (attempts < maxAttempts) {
+                        // 稍微 delay 一下再重试，万一是网络抖动
+                        setTimeout(executeParamCheck, 1000);
+                    } else {
+                        this.task.failCount++;
+                        this.finalizeItem();
+                        resolve();
+                    }
+                    return;
+                }
+
+                // 2. Heavy FFprobe Check
                 ffprobeCheck(fullUrl, (data) => {
                     if (data.isAvailable) {
                         this.handleResult(item, data);
