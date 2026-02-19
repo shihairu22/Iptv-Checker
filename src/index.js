@@ -25,15 +25,15 @@ const logger = {
 app.use((req, res, next) => {
     const start = Date.now();
     const { method, originalUrl, ip } = req;
-    
+
     // 拦截 res.end 来捕获状态码
     const originalEnd = res.end;
-    res.end = function(...args) {
+    res.end = function (...args) {
         const duration = Date.now() - start;
         const status = res.statusCode;
         // 排除静态资源日志以减少刷屏，仅记录 API 和页面访问
         if (!originalUrl.startsWith('/static') && !originalUrl.startsWith('/css') && !originalUrl.startsWith('/js') && !originalUrl.startsWith('/img') && !originalUrl.includes('.js') && !originalUrl.includes('.css')) {
-             // 状态码颜色区分
+            // 状态码颜色区分
             let logMsg = `${method} ${originalUrl} ${status} - ${duration}ms - ${ip}`;
             if (status >= 500) logger.error(logMsg);
             else if (status >= 400) logger.warn(logMsg);
@@ -72,31 +72,31 @@ function requireAuth(req, res, next) {
     // 但因为 express.static 在前面，这里主要拦截页面路由
     // 实际上我们需要拦截 /, /results.html, /results
     // 静态资源中 login.html 不需要拦截
-    
+
     // 如果是 API 请求，通常由前端自行处理 401，这里只处理页面访问
     // 但用户要求 "不登录的时候不能访问页面功能"，意味着 index.html 和 results.html 需要保护
-    
+
     // 检查 cookie
     const token = req.cookies['auth_token'];
     if (token && SESSIONS.has(token)) {
         return next();
     }
-    
+
     // API 请求返回 401
     if (req.path.startsWith('/api/') && !['/api/login', '/api/auth/check', '/api/system/info', '/api/captcha'].includes(req.path)) {
         // 排除导出接口
         if (req.path.startsWith('/api/export/')) return next();
         // 排除流代理
         if (req.path.startsWith('/api/proxy/')) return next();
-        
+
         return res.status(401).json({ success: false, message: '未登录' });
     }
-    
+
     // 页面请求重定向到登录页
     if (req.path === '/' || req.path === '/index.html' || req.path === '/results' || req.path === '/results.html') {
         return res.redirect('/login.html');
     }
-    
+
     next();
 }
 
@@ -112,7 +112,7 @@ app.get('/api/captcha', (req, res) => {
     const id = 'cap-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
     // 5分钟有效期
     CAPTCHA_STORE.set(id, { text: captcha.text.toLowerCase(), expires: Date.now() + 5 * 60 * 1000 });
-    
+
     // 简单清理过期验证码
     if (CAPTCHA_STORE.size > 1000) {
         const now = Date.now();
@@ -129,18 +129,18 @@ app.get('/api/captcha', (req, res) => {
 // 登录接口
 app.post('/api/login', (req, res) => {
     const { username, password, captcha } = req.body;
-    
+
     // 验证验证码
     const captchaId = req.cookies['captcha_id'];
     if (!captchaId || !CAPTCHA_STORE.has(captchaId)) {
-         return res.json({ success: false, message: '验证码失效，请刷新重试' });
+        return res.json({ success: false, message: '验证码失效，请刷新重试' });
     }
     const stored = CAPTCHA_STORE.get(captchaId);
     CAPTCHA_STORE.delete(captchaId); // 验证码一次性有效
-    
+
     if (!captcha || captcha.toLowerCase() !== stored.text) {
-         logger.warn(`登录失败: 验证码错误 (用户: ${username || 'unknown'})`);
-         return res.json({ success: false, message: '验证码错误' });
+        logger.warn(`登录失败: 验证码错误 (用户: ${username || 'unknown'})`);
+        return res.json({ success: false, message: '验证码错误' });
     }
 
     const user = loadUsers();
@@ -181,24 +181,24 @@ app.get('/api/auth/check', (req, res) => {
 app.post('/api/auth/update', (req, res) => {
     const token = req.cookies['auth_token'];
     if (!token || !SESSIONS.has(token)) return res.status(401).json({ success: false, message: '未登录' });
-    
+
     const { username, password, oldPassword } = req.body;
     const user = loadUsers();
-    
+
     // 验证旧密码（如果需要更严格的安全，可以加这个字段，这里简化处理直接允许修改，因为已经登录了）
     // 但为了安全，通常需要验证旧密码
     if (user.password !== oldPassword) {
-         return res.json({ success: false, message: '旧密码错误' });
+        return res.json({ success: false, message: '旧密码错误' });
     }
-    
+
     if (username) user.username = username;
     if (password) user.password = password;
     saveUsers(user);
-    
+
     // 更新 session
     const sess = SESSIONS.get(token);
     sess.username = user.username;
-    
+
     res.json({ success: true, username: user.username });
 });
 
@@ -256,7 +256,7 @@ function getProxyByType(type) {
 }
 
 function ensureDataDir() {
-    try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); } catch(e) {}
+    try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) { }
 }
 function readJson(file, defObj) {
     ensureDataDir();
@@ -265,17 +265,17 @@ function readJson(file, defObj) {
             const txt = fs.readFileSync(file, 'utf-8');
             return JSON.parse(txt);
         }
-    } catch(e) {}
+    } catch (e) { }
     return defObj;
 }
 function writeJson(file, obj) {
     ensureDataDir();
-    try { fs.writeFileSync(file, JSON.stringify(obj, null, 2), 'utf-8'); return true; } catch(e) { console.error('写入失败', file); return false; }
+    try { fs.writeFileSync(file, JSON.stringify(obj, null, 2), 'utf-8'); return true; } catch (e) { console.error('写入失败', file); return false; }
 }
 function ensureEpgDir() {
     try {
         if (!fs.existsSync(EPG_DIR)) fs.mkdirSync(EPG_DIR, { recursive: true });
-    } catch(e) {}
+    } catch (e) { }
 }
 function persistSave() {
     ensureDataDir();
@@ -284,11 +284,11 @@ function persistSave() {
         fs.writeFileSync(DATA_FILE, JSON.stringify(payload, null, 2), 'utf-8');
         const ts = new Date();
         const pad = (n) => String(n).padStart(2, '0');
-        const stamp = `${ts.getFullYear()}${pad(ts.getMonth()+1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}`;
+        const stamp = `${ts.getFullYear()}${pad(ts.getMonth() + 1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}`;
         const verFile = path.join(DATA_DIR, `streams-${stamp}.json`);
         fs.writeFileSync(verFile, JSON.stringify(payload, null, 2), 'utf-8');
         return true;
-    } catch(e) { return false; }
+    } catch (e) { return false; }
 }
 function persistLoad() {
     try {
@@ -316,7 +316,7 @@ function persistLoad() {
             }
             return true;
         }
-    } catch(e) {}
+    } catch (e) { }
     return false;
 }
 const __loaded = persistLoad();
@@ -375,7 +375,7 @@ function listVersions() {
     const entries = files.map(f => {
         const full = path.join(DATA_DIR, f);
         let time = 0;
-        try { const st = fs.statSync(full); time = st.mtimeMs || 0; } catch(e) {}
+        try { const st = fs.statSync(full); time = st.mtimeMs || 0; } catch (e) { }
         return { file: f, time };
     });
     entries.sort((a, b) => b.time - a.time);
@@ -400,7 +400,7 @@ function loadVersionFile(filename) {
             multicastList = multicastList.map(ss => ({ ...ss, httpParam: val }));
         }
         return true;
-    } catch(e) { return false; }
+    } catch (e) { return false; }
 }
 
 // ffprobe检测函数
@@ -425,6 +425,7 @@ function ffprobeCheck(fullUrl, callback) {
         let resolution = null;
         let codec_name = null;
         let service_name = null;
+        let hdr_type = null;
         let raw = null;
         try {
             if (!error && stdout) {
@@ -444,6 +445,18 @@ function ffprobeCheck(fullUrl, callback) {
                         if (!isNaN(num) && !isNaN(den) && den !== 0) {
                             frameRate = (num / den).toFixed(2);
                         }
+                    }
+                    // HDR/SDR 检测：通过 color_transfer 和 color_primaries 判断
+                    const ct = stream.color_transfer || '';
+                    if (ct === 'smpte2084') {
+                        hdr_type = 'HDR10';
+                    } else if (ct === 'arib-std-b67') {
+                        hdr_type = 'HLG';
+                    } else if (stream.color_primaries === 'bt2020') {
+                        // bt2020 色域但非 HDR10/HLG，标记为 HDR
+                        hdr_type = 'HDR';
+                    } else if (isAvailable) {
+                        hdr_type = 'SDR';
                     }
                 }
                 if (json.programs && Array.isArray(json.programs)) {
@@ -474,6 +487,7 @@ function ffprobeCheck(fullUrl, callback) {
             resolution,
             codec: codec_name,
             serviceName: service_name,
+            hdr: hdr_type,
             raw // 返回原始ffprobe json数据，便于前端调试
         };
         // 缓存
@@ -488,9 +502,9 @@ app.post('/api/check-stream', async (req, res) => {
     udpxyUrl = String(udpxyUrl || '').trim();
     multicastUrl = String(multicastUrl || '').trim();
     const fullUrl = `${udpxyUrl}/rtp/${multicastUrl.replace('rtp://', '')}`;
-    ffprobeCheck(fullUrl, ({ isAvailable, frameRate, bitRate, speed, resolution, codec, serviceName, raw }) => {
+    ffprobeCheck(fullUrl, ({ isAvailable, frameRate, bitRate, speed, resolution, codec, serviceName, hdr, raw }) => {
         // 更新或添加组播地址
-        const existingIndex = multicastList.findIndex(item => 
+        const existingIndex = multicastList.findIndex(item =>
             String(item.udpxyUrl || '').trim() === udpxyUrl && String(item.multicastUrl || '').trim() === multicastUrl
         );
         const detectFields = {
@@ -502,7 +516,8 @@ app.post('/api/check-stream', async (req, res) => {
             bitRate,
             speed,
             resolution,
-            codec
+            codec,
+            hdr
         };
         if (existingIndex !== -1) {
             const prev = multicastList[existingIndex];
@@ -529,6 +544,7 @@ app.post('/api/check-stream', async (req, res) => {
             speed,
             resolution: resolution || '-',
             codec: codec || '-',
+            hdr: hdr || '-',
             name: existingIndex !== -1 ? multicastList[existingIndex].name : (name || serviceName || ''),
             raw, // 返回原始数据
             message: isAvailable ? '流可访问' : '流不可访问'
@@ -538,7 +554,7 @@ app.post('/api/check-stream', async (req, res) => {
 app.post('/api/check-http-stream', async (req, res) => {
     let { url, name } = req.body;
     url = String(url || '').trim();
-    ffprobeCheck(url, ({ isAvailable, frameRate, bitRate, speed, resolution, codec, serviceName, raw }) => {
+    ffprobeCheck(url, ({ isAvailable, frameRate, bitRate, speed, resolution, codec, serviceName, hdr, raw }) => {
         const existingIndex = multicastList.findIndex(item => String(item.multicastUrl || '').trim() === url);
         const detectFields = {
             udpxyUrl: '',
@@ -549,7 +565,8 @@ app.post('/api/check-http-stream', async (req, res) => {
             bitRate,
             speed,
             resolution,
-            codec
+            codec,
+            hdr
         };
         if (existingIndex !== -1) {
             const prev = multicastList[existingIndex];
@@ -576,6 +593,7 @@ app.post('/api/check-http-stream', async (req, res) => {
             speed,
             resolution: resolution || '-',
             codec: codec || '-',
+            hdr: hdr || '-',
             name: existingIndex !== -1 ? multicastList[existingIndex].name : (name || serviceName || ''),
             raw,
             message: isAvailable ? '流可访问' : '流不可访问'
@@ -823,7 +841,7 @@ function buildUnicastCatchupBase(scope, unicastUrl, proto = 'http') {
     }
     return stripQuery(raw);
 }
-const GROUP_ORDER = ['4K频道','央视频道','湖南频道','卫视频道','港台频道','数字频道','少儿频道','购物频道','预留频道','未分类频道'];
+const GROUP_ORDER = ['4K频道', '央视频道', '湖南频道', '卫视频道', '港台频道', '数字频道', '少儿频道', '购物频道', '预留频道', '未分类频道'];
 function groupRankOf(s) {
     const g = (s.groupTitle || '').trim() || '未分类频道';
     const i = GROUP_ORDER.indexOf(g);
@@ -837,17 +855,17 @@ function parseCCTVNum(s) {
 function getQualityScore(s) {
     // 基础分数：组播(2000) > 单播(0)
     let score = isMulticastStream(s) ? 2000 : 0;
-    
+
     // 分辨率分数：4K(500) > 1080P(300) > 720P(100) > 其他(0)
     const res = (s.resolution || '').toLowerCase();
     if (res === '3840x2160') score += 500;
     else if (res === '1920x1080') score += 300;
     else if (res === '1280x720') score += 100;
-    
+
     // 帧率分数：50fps(50) > 25fps(25) > 其他(0)
     const fps = parseFloat(s.frameRate || '0');
     if (!isNaN(fps)) score += fps;
-    
+
     return score;
 }
 function sortStreamsForExport(list) {
@@ -1091,7 +1109,7 @@ app.get('/api/export/json', (req, res) => {
         const name = s.name || '';
         const udpxyUrl = s.udpxyUrl || '';
         const multicastUrl = s.multicastUrl || '';
-        const httpUrl = (function(){
+        const httpUrl = (function () {
             const u = String(s.multicastUrl || '').trim();
             const scheme = u.split(':')[0].toLowerCase();
             const isMulticast = !!s.udpxyUrl || scheme === 'rtp' || scheme === 'udp';
@@ -1257,13 +1275,13 @@ app.post('/api/persist/delete', (req, res) => {
     try {
         if (fs.existsSync(DATA_FILE)) fs.unlinkSync(DATA_FILE);
         return res.json({ success: true });
-    } catch(e) { 
+    } catch (e) {
         logger.error(`删除数据失败: ${e.message}`);
-        return res.status(500).json({ success: false, message: '删除失败' }); 
+        return res.status(500).json({ success: false, message: '删除失败' });
     }
 });
 app.get('/api/persist/list', (req, res) => {
-    try { return res.json({ success: true, versions: listVersions() }); } catch(e) { res.status(500).json({ success: false }); }
+    try { return res.json({ success: true, versions: listVersions() }); } catch (e) { res.status(500).json({ success: false }); }
 });
 app.post('/api/persist/load-version', (req, res) => {
     const { filename } = req.body || {};
@@ -1290,7 +1308,7 @@ app.post('/api/persist/delete-version', (req, res) => {
         } else {
             return res.status(404).json({ success: false, message: '文件不存在' });
         }
-    } catch(e) { return res.status(500).json({ success: false, message: '删除失败' }); }
+    } catch (e) { return res.status(500).json({ success: false, message: '删除失败' }); }
 });
 app.get('/api/config/logo-templates', (req, res) => {
     const defId = 'ltpl-default';
@@ -1514,26 +1532,26 @@ app.post('/api/config/app-settings', (req, res) => {
     res.json({ success: true });
 });
 app.get('/api/config/epg-sources', (req, res) => {
-  const cfg = readJson(CFG_EPG, { sources: [] });
-  const list = Array.isArray(cfg.sources) ? cfg.sources : [];
-  const normalized = list.map(x => ({
-    id: x && x.id ? x.id : ('epg-' + Math.random().toString(36).slice(2) + Date.now().toString(36)),
-    name: x && x.name ? x.name : '未命名EPG',
-    url: x && x.url ? x.url : '',
-    scope: (x && x.scope === '外网' || x && x.scope === '外网EPG') ? '外网EPG' : '内网EPG'
-  })).filter(x => !!x.url);
-  res.json({ success: true, sources: normalized });
+    const cfg = readJson(CFG_EPG, { sources: [] });
+    const list = Array.isArray(cfg.sources) ? cfg.sources : [];
+    const normalized = list.map(x => ({
+        id: x && x.id ? x.id : ('epg-' + Math.random().toString(36).slice(2) + Date.now().toString(36)),
+        name: x && x.name ? x.name : '未命名EPG',
+        url: x && x.url ? x.url : '',
+        scope: (x && x.scope === '外网' || x && x.scope === '外网EPG') ? '外网EPG' : '内网EPG'
+    })).filter(x => !!x.url);
+    res.json({ success: true, sources: normalized });
 });
 app.post('/api/config/epg-sources', (req, res) => {
-  const { sources } = req.body || {};
-  const list = Array.isArray(sources) ? sources.map(x => ({
-    id: x && x.id ? x.id : ('epg-' + Math.random().toString(36).slice(2) + Date.now().toString(36)),
-    name: x && x.name ? x.name : '未命名EPG',
-    url: x && x.url ? x.url : '',
-    scope: (x && x.scope === '外网EPG') ? '外网EPG' : '内网EPG'
-  })).filter(x => !!x.url) : [];
-  writeJson(CFG_EPG, { sources: list });
-  res.json({ success: true });
+    const { sources } = req.body || {};
+    const list = Array.isArray(sources) ? sources.map(x => ({
+        id: x && x.id ? x.id : ('epg-' + Math.random().toString(36).slice(2) + Date.now().toString(36)),
+        name: x && x.name ? x.name : '未命名EPG',
+        url: x && x.url ? x.url : '',
+        scope: (x && x.scope === '外网EPG') ? '外网EPG' : '内网EPG'
+    })).filter(x => !!x.url) : [];
+    writeJson(CFG_EPG, { sources: list });
+    res.json({ success: true });
 });
 
 const epgCache = new Map();
@@ -1572,7 +1590,7 @@ async function fetchAndStoreXmltv(id, url) {
         } else {
             xml = buf.toString('utf-8');
         }
-    } catch(e) {
+    } catch (e) {
         // 回退：当标识为gz但非gz内容时，直接按文本处理
         xml = buf.toString('utf-8');
     }
@@ -1594,7 +1612,7 @@ async function loadXmltvFromLocalOrRemote(source, maxAgeMs = 60 * 60 * 1000, for
     const url = source.url;
     const now = Date.now();
     const cacheKey = `local:${id}`;
-    
+
     if (!forceRefresh) {
         const cached = epgCache.get(cacheKey);
         if (cached && now - cached.ts < maxAgeMs) return cached.data;
@@ -1602,20 +1620,20 @@ async function loadXmltvFromLocalOrRemote(source, maxAgeMs = 60 * 60 * 1000, for
 
     const f = epgFileFor(id);
     let needRefresh = true;
-    
+
     if (!forceRefresh) {
         try {
             if (fs.existsSync(f)) {
                 const stat = fs.statSync(f);
                 if (now - stat.mtimeMs < maxAgeMs) needRefresh = false;
             }
-        } catch(e) {}
+        } catch (e) { }
     }
 
     if (needRefresh) {
         try {
             await fetchAndStoreXmltv(id, url);
-        } catch(e) {
+        } catch (e) {
             // 如果远端失败且本地存在旧文件，则继续用旧文件
         }
     }
@@ -1627,7 +1645,7 @@ async function loadXmltvFromLocalOrRemote(source, maxAgeMs = 60 * 60 * 1000, for
 
 function formatUtc(dt, fmt) {
     const d = new Date(dt);
-    const pad = (n, w=2) => String(n).padStart(w, '0');
+    const pad = (n, w = 2) => String(n).padStart(w, '0');
     const y = d.getUTCFullYear();
     const M = pad(d.getUTCMonth() + 1);
     const D = pad(d.getUTCDate());
@@ -1660,7 +1678,7 @@ app.get('/api/epg/programs', async (req, res) => {
             url: x && x.url ? x.url : '',
             scope: (x && x.scope === '外网' || x && x.scope === '外网EPG') ? '外网EPG' : '内网EPG'
         })).filter(x => x.url);
-        
+
         let pick = null;
         if (epgId) {
             pick = epgList.find(x => x.id === epgId) || null;
@@ -1668,9 +1686,9 @@ app.get('/api/epg/programs', async (req, res) => {
         if (!pick) {
             pick = (scope === 'external' ? (epgList.find(x => x.scope === '外网EPG') || null) : (epgList.find(x => x.scope === '内网EPG') || null)) || null;
         }
-        
+
         if (!pick) return res.json({ success: true, programs: [], channel: null, message: 'No EPG source found' });
-        
+
         const tv = await loadXmltvFromLocalOrRemote(pick, 60 * 60 * 1000, forceRefresh);
         const chans = tv.channels || [];
         const progs = tv.programmes || [];
@@ -1684,7 +1702,7 @@ app.get('/api/epg/programs', async (req, res) => {
                 .replace(/4K/g, '')
                 .replace(/高清/g, '')
                 .replace(/频道/g, '')
-                .replace(/[^A-Z0-9\u4e00-\u9fa5]/g, ''); 
+                .replace(/[^A-Z0-9\u4e00-\u9fa5]/g, '');
             const target = normalize(nm);
 
             ch = chans.find(c => {
@@ -1696,7 +1714,7 @@ app.get('/api/epg/programs', async (req, res) => {
             }) || null;
         }
         const chId = ch ? String(ch['@_id'] || '').trim() : (channelId || '');
-        const day = dateStr ? new Date(dateStr + 'T00:00:00Z') : new Date(new Date().toISOString().slice(0,10) + 'T00:00:00Z');
+        const day = dateStr ? new Date(dateStr + 'T00:00:00Z') : new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
         const startDay = day.getTime();
         const endDay = startDay + 24 * 60 * 60 * 1000;
         const list = progs.filter(p => {
@@ -1718,7 +1736,7 @@ app.get('/api/epg/programs', async (req, res) => {
             else if (Array.isArray(p.desc)) desc = p.desc.map(x => (typeof x === 'string') ? x : (x && x['#text'] ? x['#text'] : '')).filter(Boolean)[0] || '';
             else if (p.desc && p.desc['#text']) desc = p.desc['#text'];
             return { startMs: st, endMs: en != null ? en : (st + 3600000), title, desc };
-        }).sort((a,b)=>a.startMs-b.startMs);
+        }).sort((a, b) => a.startMs - b.startMs);
         res.json({ success: true, channel: ch ? { id: chId, names: ch['display-name'] } : null, programs: list, epgName: pick.name, epgId: pick.id });
     } catch (e) {
         res.json({ success: true, channel: null, programs: [] });
@@ -1750,7 +1768,7 @@ app.post('/api/epg/refresh', async (req, res) => {
             try {
                 const f = await fetchAndStoreXmltv(s.id, s.url);
                 results.push({ id: s.id, ok: true, file: path.basename(f) });
-            } catch(e) {
+            } catch (e) {
                 results.push({ id: s.id, ok: false, error: 'fetch failed' });
             }
         }
@@ -1800,7 +1818,7 @@ app.get('/api/catchup/play', (req, res) => {
     if (fmt === 'ku9') {
         const b = formatUtc(startMs, 'yyyyMMddHHmmss');
         const e = formatUtc(endMs, 'yyyyMMddHHmmss');
-        url += `?starttime=${b.slice(0,8)}T${b.slice(8)}&endtime=${e.slice(0,8)}T${e.slice(8)}`;
+        url += `?starttime=${b.slice(0, 8)}T${b.slice(8)}&endtime=${e.slice(0, 8)}T${e.slice(8)}`;
     } else if (fmt === 'mytv') {
         const b = formatUtc(startMs, 'yyyyMMddHHmmss');
         const e = formatUtc(endMs, 'yyyyMMddHHmmss');
@@ -1844,7 +1862,7 @@ app.get('/api/proxy/stream', async (req, res) => {
             return res.status(400).send('invalid url');
         }
         const hdrs = {};
-        ['range','referer','user-agent','origin','accept','accept-encoding','accept-language','cookie'].forEach(h => {
+        ['range', 'referer', 'user-agent', 'origin', 'accept', 'accept-encoding', 'accept-language', 'cookie'].forEach(h => {
             const v = req.headers[h];
             if (v) hdrs[h] = v;
         });
@@ -1864,7 +1882,7 @@ app.get('/api/proxy/stream', async (req, res) => {
 function rewriteHlsPlaylist(content, baseUrl) {
     const lines = String(content || '').split(/\r?\n/);
     const toAbs = (p) => {
-        try { return new URL(p, baseUrl).href; } catch(e) { return p; }
+        try { return new URL(p, baseUrl).href; } catch (e) { return p; }
     };
     const rewriteAttrUri = (line) => {
         const m = line.match(/URI="([^"]+)"/i);
@@ -1872,7 +1890,7 @@ function rewriteHlsPlaylist(content, baseUrl) {
         const abs = toAbs(m[1]);
         const isM3u8 = /\.m3u8(\?|$)/i.test(abs);
         const prox = (isM3u8 ? '/api/proxy/hls?url=' : '/api/proxy/stream?url=') + encodeURIComponent(abs);
-        return line.replace(/URI="([^"]+)"/i, 'URI="'+prox+'"');
+        return line.replace(/URI="([^"]+)"/i, 'URI="' + prox + '"');
     };
     const out = lines.map(l => {
         const t = l.trim();
@@ -1892,7 +1910,7 @@ app.get('/api/proxy/hls', async (req, res) => {
         const url = String(req.query.url || '').trim();
         if (!/^https?:\/\//i.test(url)) return res.status(400).send('invalid url');
         const hdrs = {};
-        ['referer','user-agent','origin','accept','accept-language','cookie'].forEach(h => {
+        ['referer', 'user-agent', 'origin', 'accept', 'accept-language', 'cookie'].forEach(h => {
             const v = req.headers[h];
             if (v) hdrs[h] = v;
         });
@@ -1904,7 +1922,7 @@ app.get('/api/proxy/hls', async (req, res) => {
         let text = Buffer.from(resp.data).toString('utf-8');
         const enc = (resp.headers && (resp.headers['content-encoding'] || resp.headers['Content-Encoding'])) || '';
         if (/gzip/i.test(enc)) {
-            try { text = zlib.gunzipSync(Buffer.from(resp.data)).toString('utf-8'); } catch(e) {}
+            try { text = zlib.gunzipSync(Buffer.from(resp.data)).toString('utf-8'); } catch (e) { }
         }
         const body = rewriteHlsPlaylist(text, url);
         res.set('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
@@ -1934,7 +1952,7 @@ app.post('/api/system/update', (req, res) => {
     const isDocker = fs.existsSync('/.dockerenv') || fs.existsSync('/run/.containerenv');
     // 检查是否挂载了 .git 目录（开发模式）
     const hasGit = fs.existsSync(path.join(__dirname, '../.git'));
-    
+
     if (isDocker && !hasGit) {
         logger.warn('Docker环境无.git挂载，无法自动更新');
         return res.json({ success: false, message: 'Docker 环境请手动拉取新镜像更新：docker-compose pull && docker-compose up -d' });
