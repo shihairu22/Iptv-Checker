@@ -2,9 +2,9 @@ const net = require('net');
 const dgram = require('dgram');
 const { URL } = require('url');
 
-// 预检超时 (毫秒)
-const TIMEOUT_HTTP = 1000;
-const TIMEOUT_UDP = 1000; // 等待 UDP 包的时间，IPTV 通常流量很大，1秒没包基本就是死链
+// 预检超时 (毫秒) - 适配高延迟 IPTV (用户反馈 5000-6000ms)
+const TIMEOUT_HTTP = 8000;
+const TIMEOUT_UDP = 8000;
 
 /**
  * 检查 IP 是否为组播地址
