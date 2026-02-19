@@ -5,8 +5,10 @@ const { ffprobeCheck } = require('./ffprobe');
 const persistence = require('./services/persistenceService');
 const streamService = require('./services/streamService');
 const packageJson = require('../package.json');
+const { Worker } = require('worker_threads');
 
 const STATE_FILE = 'current_task.json';
+const LOG_SIZE = 50;
 
 let PQueue;
 (async () => {
@@ -17,10 +19,6 @@ let PQueue;
         console.error('Failed to import p-queue:', e);
     }
 })();
-
-const { Worker } = require('worker_threads');
-
-const LOG_SIZE = 50;
 
 class TaskManager extends EventEmitter {
     constructor() {
@@ -43,6 +41,7 @@ class TaskManager extends EventEmitter {
         this.queue = null; // PQueue instance
         this.resultBuffer = [];
         this.io = null;
+        this.workers = new Set(); // Track active workers
 
         // 初始化加载状态
         this.init().catch(err => console.error('Task init failed:', err));
@@ -71,12 +70,10 @@ class TaskManager extends EventEmitter {
     }
 
     async saveState() {
-        // 保存时剔除 items 大数组以减小 IO，items 启动时重新生成或单独存储
-        // 为简单起见，如果 items 不大可以存。但在 IPTV 场景 items 可能很大。
-        // 策略：只存 params，重启时 regenerate items，然后 fast-forward 到 finished 索引
+        // 保存时剔除 items 大数组以减小 IO
         const stateToSave = {
             ...this.task,
-            items: [] // 暂不存 items，靠 regenerate
+            items: []
         };
         await persistence.writeJson(STATE_FILE, stateToSave);
     }
@@ -293,11 +290,19 @@ class TaskManager extends EventEmitter {
         if (!this.task.running) return;
         this.task.running = false;
         this.task.paused = true;
+
         if (this.queue) {
             this.queue.pause();
             this.queue.clear();
         }
-        this.log('任务已手动暂停');
+
+        // 终止所有正在运行的 Worker
+        for (const worker of this.workers) {
+            worker.terminate().catch(() => { });
+        }
+        this.workers.clear();
+
+        this.log('任务已手动暂停，正在运行的任务已取消');
         this.saveState();
     }
 
@@ -317,6 +322,8 @@ class TaskManager extends EventEmitter {
                 }
             });
 
+            this.workers.add(worker);
+
             worker.on('message', (msg) => {
                 if (msg.success) {
                     this.handleResult(item, msg.data);
@@ -326,10 +333,21 @@ class TaskManager extends EventEmitter {
             });
 
             worker.on('error', (err) => {
-                this.task.failCount++;
+                if (!this.task.paused) {
+                    this.task.failCount++;
+                }
             });
 
             worker.on('exit', (code) => {
+                this.workers.delete(worker);
+
+                // 如果任务已暂停，说明是被强制终止的 (或者在暂停瞬间自然退出的)
+                // 此时不计入 finished，以便 Resume 时重试
+                if (this.task.paused) {
+                    resolve();
+                    return;
+                }
+
                 this.task.finished++;
                 // 阶段性保存状态 (每 20 条)
                 if (this.task.finished % 20 === 0) {
@@ -345,6 +363,9 @@ class TaskManager extends EventEmitter {
     }
 
     handleResult(item, data) {
+        // 如果暂停了，不再处理结果
+        if (this.task.paused) return;
+
         if (data.isAvailable) {
             this.task.successCount++;
             const resultItem = {
@@ -383,8 +404,6 @@ class TaskManager extends EventEmitter {
             this.io.emit('task:progress', this.getStatus());
         }
     }
-
-
 
     async finishTask() {
         this.task.running = false;
