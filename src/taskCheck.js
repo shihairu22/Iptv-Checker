@@ -7,15 +7,7 @@ const streamService = require('./services/streamService');
 const packageJson = require('../package.json');
 
 const STATE_FILE = 'current_task.json';
-const PQueue = require('p-queue').default; // p-queue v8+ is ESM, but if we are in CJS, we might need dynamic import or older version.
-// Checking package.json... if using "type": "commonjs" (default), we need to ensure p-queue version is compatible.
-// If p-queue is installed as latest (8+), it is ESM only.
-// Let's assume we might need dynamic import or use an older version.
-// For now, let's try standard require. If it fails, we will fix it.
-// Actually, let's use dynamic import in init to be safe, or just use `require('p-queue')` if it's an older version.
-// Wait, user installed `p-queue` just now. It is likely v8.
-// Node.js support dynamic import().
-// Let's use a workaround:
+
 let PQueue;
 (async () => {
     try {
