@@ -122,8 +122,75 @@ class TaskManager extends EventEmitter {
                     expanded.forEach(u => this.task.items.push({ name, url: u, udpxyUrl }));
                 }
             });
+        } else if (type === 'range') {
+            const { udpxyUrl, startUrl, endUrl, ports: portStr } = params;
+
+            // 辅助函数：解析 IP 和端口
+            const parseRtp = (url) => {
+                const u = (url || '').trim();
+                const match = u.match(/rtp:\/\/([^:]+):(\d+)/);
+                if (!match) return null;
+                return { host: match[1], port: parseInt(match[2], 10) };
+            };
+
+            const ipToInt = (ip) => {
+                const parts = ip.split('.').map(Number);
+                return (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3];
+            };
+
+            const intToIp = (intv) => {
+                const a = (intv >>> 24) & 255;
+                const b = (intv >>> 16) & 255;
+                const c = (intv >>> 8) & 255;
+                const d = intv & 255;
+                return `${a}.${b}.${c}.${d}`;
+            };
+
+            const parsePorts = (str) => {
+                const ports = [];
+                const parts = (str || '').split(',').map(s => s.trim()).filter(Boolean);
+                for (const p of parts) {
+                    if (p.includes('-')) {
+                        const [start, end] = p.split('-').map(Number);
+                        if (!isNaN(start) && !isNaN(end)) {
+                            for (let i = Math.min(start, end); i <= Math.max(start, end); i++) ports.push(i);
+                        }
+                    } else {
+                        const n = Number(p);
+                        if (!isNaN(n)) ports.push(n);
+                    }
+                }
+                return [...new Set(ports)];
+            };
+
+            const s = parseRtp(startUrl);
+            const e = parseRtp(endUrl);
+
+            if (s && e) {
+                let startIp = ipToInt(s.host);
+                let endIp = ipToInt(e.host);
+                if (startIp > endIp) [startIp, endIp] = [endIp, startIp];
+
+                // 端口列表：优先使用 params.ports，否则使用 StartUrl/EndUrl 中的端口
+                let ports = parsePorts(portStr);
+                if (ports.length === 0) {
+                    ports.push(s.port);
+                    if (e.port !== s.port) ports.push(e.port);
+                }
+
+                // 生成任务项
+                for (let ip = startIp; ip <= endIp; ip++) {
+                    const currentIp = intToIp(ip);
+                    for (const port of ports) {
+                        this.task.items.push({
+                            name: '',
+                            url: `rtp://${currentIp}:${port}`,
+                            udpxyUrl
+                        });
+                    }
+                }
+            }
         }
-        // TODO: 支持 'range' 做组播扫描，逻辑类似
 
         this.task.total = this.task.items.length;
     }

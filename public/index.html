@@ -509,12 +509,12 @@
                 try {
                     const r = await fetch('/api/task/status');
                     const task = await r.json();
-                    
+
                     if (task.running || task.paused) {
                         const percent = task.total > 0 ? Math.round((task.finished / task.total) * 100) : 0;
-                        showProgress(task.finished, task.total, 
+                        showProgress(task.finished, task.total,
                             task.paused ? `任务暂停 | 已完成: ${task.finished}/${task.total}` : `正在后台检测: ${task.finished}/${task.total} | 成功: ${task.success} 失败: ${task.fail}`);
-                        
+
                         // 自动获取最新的流列表（可选，不必每次轮询都获取，可以每隔几次）
                         if (task.finished % 20 === 0 || task.finished === task.total) {
                             getStreams();
@@ -545,14 +545,14 @@
 
         // 批量检测（提交给后台）
         async function batchCheckStreams(udpxyUrl, batchText) {
-             // 简单的参数校验
+            // 简单的参数校验
             if (!batchText || !batchText.trim()) {
                 showCenterConfirm('请输入或加载检测地址', null, true);
                 return;
             }
 
             const concurrency = document.getElementById('concurrencySelect') ? document.getElementById('concurrencySelect').value : 10;
-            
+
             try {
                 const response = await fetch('/api/task/start', {
                     method: 'POST',
@@ -600,10 +600,10 @@
                 // 鉴于时间，这里假设用户只需清空前端显示，或者需要补充后端接口。
                 // *补充*：检查 stream.js 路由，发现没有 DELETE /api/streams。
                 // 为保证功能完整，我们稍后在 stream.js 补上。
-                
+
                 // 临时仅前端清空，并调用一个设想的接口
                 // await fetch('/api/streams/clear', { method: 'POST' }); 
-                
+
                 getStreams();
             });
         };
@@ -978,6 +978,7 @@
         });
         // 统一检测与停止按钮
         // 统一检测与停止按钮
+        // 统一检测与停止按钮
         document.getElementById('startDetectBtn').addEventListener('click', async () => {
             if (detectRunning) return;
 
@@ -1003,8 +1004,18 @@
                 }
 
                 try {
+                    // 清除旧的前端任务残留（如果有）
+                    clearScanTask();
+
                     if (batchText.trim()) {
-                        await batchCheckStreamsMixed(udpxyUrl, batchText);
+                        // 假设 batchCheckStreams 已经适配后台
+                        if (typeof batchCheckStreams === 'function') {
+                            await batchCheckStreams(udpxyUrl, batchText);
+                        } else {
+                            //这里可能调用的是 batchCheckStreamsMixed，视具体实现而定，根据上下文应该是调用 backend API
+                            // 上文中 batchCheckStreams 实现为调用 /api/task/start (Step 477)
+                            await batchCheckStreams(udpxyUrl, batchText);
+                        }
                     } else if (startUrl && endUrl) {
                         await rangeCheckStreams(udpxyUrl, startUrl, endUrl);
                     } else {
@@ -1016,49 +1027,8 @@
                 }
             }
 
-            // 检查是否有上次未完成的任务
-            const t = loadScanTask();
-            if (t && t.status !== 'done' && t.finished < t.total) {
-                const msg = `检测到上次未完成任务（已完成 ${t.finished}/${t.total}）。<br>点击“确定”继续任务，点击“取消”重新开始。`;
-                showCenterConfirm(msg, async (resume) => {
-                    if (resume) {
-                        // 继续任务
-                        detectCancel = false;
-                        detectRunning = true;
-                        const startBtn = document.getElementById('startDetectBtn');
-                        const stopBtn = document.getElementById('stopDetectBtn');
-                        if (startBtn) startBtn.disabled = true;
-                        if (stopBtn) stopBtn.disabled = false;
-
-                        // 恢复UI显示
-                        if (t.udpxyUrl) document.getElementById('udpxyUrl').value = t.udpxyUrl;
-                        if (t.type === 'range') {
-                            if (t.startUrl) document.getElementById('rangeStart').value = t.startUrl || '';
-                            if (t.endUrl) document.getElementById('rangeEnd').value = t.endUrl || '';
-                            if (t.ports) document.getElementById('portInput').value = t.ports || '';
-                        } else {
-                            if (t.batchText) document.getElementById('batchInput').value = t.batchText || '';
-                        }
-
-                        try {
-                            if (t.type === 'range') {
-                                await rangeCheckStreams(t.udpxyUrl, t.startUrl, t.endUrl, t.finished);
-                            } else {
-                                await batchCheckStreamsMixed(t.udpxyUrl, t.batchText, t.finished);
-                            }
-                        } finally {
-                            detectRunning = false;
-                            if (startBtn) startBtn.disabled = false;
-                        }
-                    } else {
-                        // 重新开始：清除旧任务缓存，执行新任务逻辑
-                        clearScanTask();
-                        startNewScan();
-                    }
-                }, false);
-            } else {
-                startNewScan();
-            }
+            // 直接开始新任务（后台任务会自动管理状态）
+            startNewScan();
         });
         document.getElementById('stopDetectBtn').addEventListener('click', () => {
             detectCancel = true;
@@ -1149,101 +1119,37 @@
             }, true);
         }
         // 范围检测工具与入口
-        function ipToInt(ip) {
-            const parts = ip.split('.').map(Number);
-            if (parts.length !== 4 || parts.some(n => isNaN(n) || n < 0 || n > 255)) return null;
-            return (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3];
-        }
-        function intToIp(intv) {
-            const a = (intv >>> 24) & 255, b = (intv >>> 16) & 255, c = (intv >>> 8) & 255, d = intv & 255;
-            return `${a}.${b}.${c}.${d}`;
-        }
-        function parseRtp(url) {
-            const u = (url || '').trim();
-            if (!u.startsWith('rtp://')) return null;
-            const hostPort = u.replace('rtp://', '');
-            const [host, portStr] = hostPort.split(':');
-            const port = Number(portStr);
-            const ipInt = ipToInt(host);
-            if (!ipInt || !port) return null;
-            return { ipInt, port, host };
-        }
-        async function rangeCheckStreams(udpxyUrl, startUrl, endUrl, resumeFrom) {
+
+        async function rangeCheckStreams(udpxyUrl, startUrl, endUrl) {
             if (!udpxyUrl) { showCenterConfirm('请先选择UDPXY服务器', null, true); return; }
-            const s = parseRtp(startUrl);
-            const e = parseRtp(endUrl);
-            if (!s || !e) { showCenterConfirm('请输入正确的范围（rtp://ip:port）', null, true); return; }
-            let a = s.ipInt, b = e.ipInt;
-            if (a > b) [a, b] = [b, a];
-            const ipCount = (b - a + 1);
-            // 获取端口列表：优先使用端口输入框中的多端口，否则使用起始地址的端口
+            if (!startUrl || !endUrl) { showCenterConfirm('请输入正确的范围（rtp://ip:port）', null, true); return; }
+
             const portVal = document.getElementById('portInput')?.value.trim();
-            let ports = parsePorts(portVal);
-            if (ports.length === 0) {
-                // 没有填端口列表时，使用起止地址的端口
-                ports = [s.port];
-                if (e.port !== s.port) ports.push(e.port);
-            }
-            // 生成 IP × 端口 笛卡尔积
-            const multicastList = [];
-            for (let i = 0; i < ipCount; i++) {
-                const ip = intToIp(a + i);
-                for (const port of ports) {
-                    multicastList.push({ name: '', multicastUrl: `rtp://${ip}:${port}` });
-                }
-            }
-            const totalCount = multicastList.length;
-            const portInfo = ports.length > 1 ? `（${ipCount}IP × ${ports.length}端口）` : '';
-            // 断点续扫：跳过已完成的项
-            const skipCount = (typeof resumeFrom === 'number' && resumeFrom > 0) ? Math.min(resumeFrom, totalCount) : 0;
-            // 保存任务参数（新任务或续扫都更新）
-            saveScanTask({ type: 'range', udpxyUrl, startUrl, endUrl, ports: portVal || '', finished: skipCount, total: totalCount, status: 'running', timestamp: Date.now() });
-            showProgress(skipCount, totalCount, skipCount > 0 ? `续扫${portInfo}，从第 ${skipCount + 1} 条继续，共${totalCount}条` : `正在范围检测${portInfo}，共${totalCount}条`);
+            const concurrency = document.getElementById('concurrencySelect') ? document.getElementById('concurrencySelect').value : 10;
+
             try {
-                let lastSuccess = null;
-                let idx = skipCount; // 从断点位置开始分发
-                let finished = skipCount; // 已完成数从断点开始计
-                const limit = parseInt((document.getElementById('concurrencySelect') && document.getElementById('concurrencySelect').value) || '5', 10);
-                async function detectOne(item) {
-                    if (detectCancel) return;
-                    const resp = await fetch('/api/check-stream', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ udpxyUrl, multicastUrl: item.multicastUrl, name: '' })
-                    });
-                    const data = await resp.json();
-                    finished++;
-                    updateScanProgress(finished); // 实时更新进度缓存
-                    showProgress(finished, totalCount, `检测: (${udpxyUrl}/rtp/${item.multicastUrl.replace('rtp://', '')}) | 分辨率:${data.resolution || '-'} | 编码:${data.codec || '-'} | ${data.hdr && data.hdr !== '-' ? data.hdr : ''} | 音频:${data.audio && data.audio !== '-' ? data.audio.toUpperCase() : '-'} | 帧率:${data.frameRate || '-'} | ${data.isAvailable ? '✅在线' : '❌离线'}`);
-                    if (data.success) lastSuccess = { ...data, name: '', multicastUrl: item.multicastUrl };
-                    if (lastSuccess) showLastResult(lastSuccess, lastSuccess.name, lastSuccess.multicastUrl);
-                }
-                async function runNext() {
-                    if (detectCancel || idx >= multicastList.length) return;
-                    const item = multicastList[idx++];
-                    showProgress(finished, totalCount, `正在检测: (${udpxyUrl}/rtp/${item.multicastUrl.replace('rtp://', '')})`);
-                    await detectOne(item);
-                    await runNext();
-                }
-                const remaining = multicastList.length - skipCount;
-                await Promise.all(Array(Math.min(limit, remaining)).fill(0).map(() => runNext()));
-                const responseAll = await fetch('/api/streams');
-                const allData = await responseAll.json();
-                const onlineCount = (allData.streams || []).filter(r => r.isAvailable).length;
-                const offlineCount = (allData.streams || []).filter(r => !r.isAvailable).length;
-                if (detectCancel) {
-                    // 中断：保留任务缓存，标记为 paused
-                    const t = loadScanTask(); if (t) { t.status = 'paused'; saveScanTask(t); }
-                    showProgress(finished, totalCount, `检测停止 | 已完成: ${finished}/${totalCount} 在线: ${onlineCount} 离线: ${offlineCount}（可继续）`);
+                const response = await fetch('/api/task/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        type: 'range',
+                        udpxyUrl,
+                        startUrl,
+                        endUrl,
+                        ports: portVal,
+                        concurrency
+                    }),
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showProgress(0, 100, '后台范围检测任务已启动...');
+                    startTaskPolling();
                 } else {
-                    // 完成：清除任务缓存
-                    clearScanTask();
-                    showProgress(totalCount, totalCount, `检测完成${portInfo} | 总数: ${totalCount} 在线: ${onlineCount} 离线: ${offlineCount}`);
+                    showCenterConfirm('任务启动失败，可能已有任务在运行', null, true);
                 }
-                getStreams();
-            } catch (err) {
-                showProgress(1, 1, '范围检测请求失败');
-                setTimeout(hideProgress, 1800);
+            } catch (error) {
+                console.error('Error:', error);
+                showCenterConfirm('请求失败', null, true);
             }
         }
         // 进度条上方、下方、进度条本身样式统一美化

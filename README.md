@@ -307,7 +307,7 @@ sudo systemctl status iptv-checker --no-pager
 3. 🌐 国内用户如果 GitHub 镜像拉取较慢，建议切换到阿里云镜像
 4. 📋 查看实时日志：`docker-compose logs -f`
 5. 🔄 重启容器：`docker-compose restart`
-6. ⬆️ 更新镜像：`docker-compose pull && docker-compose up -d`
+6. ⬆️ 更新镜像/应用配置：`docker-compose up -d --build`
 
 #### 6 注意事项
 
