@@ -501,6 +501,8 @@
                 } catch (error) { console.error('Error:', error); }
             });
         }
+        let isTaskPaused = false;
+
         // 轮询后台任务状态
         let pollTimer = null;
         async function startTaskPolling() {
@@ -511,11 +513,28 @@
                     const task = await r.json();
 
                     if (task.running || task.paused) {
+                        isTaskPaused = task.paused;
                         const percent = task.total > 0 ? Math.round((task.finished / task.total) * 100) : 0;
                         showProgress(task.finished, task.total,
-                            task.paused ? `任务暂停 | 已完成: ${task.finished}/${task.total}` : `正在后台检测: ${task.finished}/${task.total} | 成功: ${task.success} 失败: ${task.fail}`);
+                            task.paused ? `任务暂停 (已完成: ${task.finished}/${task.total}) - 点击“继续检测”恢复` : `正在后台检测: ${task.finished}/${task.total} | 成功: ${task.success} 失败: ${task.fail}`);
+                        
+                        // 更新按钮状态
+                        const startBtn = document.getElementById('startDetectBtn');
+                        if(startBtn) {
+                            if (task.paused) {
+                                startBtn.innerHTML = '<i class="bi bi-play-circle-fill me-1"></i> 继续检测';
+                                startBtn.classList.remove('btn-success');
+                                startBtn.classList.add('btn-warning');
+                            } else {
+                                // 运行中，通常禁用开始按钮或显示“运行中”
+                                startBtn.innerHTML = '<i class="bi bi-activity me-1"></i> 检测中...';
+                                startBtn.classList.remove('btn-warning');
+                                startBtn.classList.add('btn-success');
+                                // startBtn.disabled = true; // 可选：禁用防止重复点击
+                            }
+                        }
 
-                        // 自动获取最新的流列表（可选，不必每次轮询都获取，可以每隔几次）
+                        // 自动获取最新的流列表
                         if (task.finished % 20 === 0 || task.finished === task.total) {
                             getStreams();
                         }
@@ -525,9 +544,27 @@
                             pollTimer = null;
                             showProgress(task.total, task.total, `检测完成 | 总数: ${task.total} 在线: ${task.success} 离线: ${task.fail}`);
                             getStreams();
+                            
+                            // 恢复按钮
+                            const startBtn = document.getElementById('startDetectBtn');
+                            if(startBtn) {
+                                startBtn.innerHTML = '<i class="bi bi-play-circle-fill me-1"></i> 开始检测';
+                                startBtn.classList.remove('btn-warning');
+                                startBtn.classList.add('btn-success');
+                                // startBtn.disabled = false;
+                            }
+                            isTaskPaused = false;
                         }
                     } else {
                         // 任务未运行
+                        isTaskPaused = false;
+                        const startBtn = document.getElementById('startDetectBtn');
+                        if(startBtn) {
+                            startBtn.innerHTML = '<i class="bi bi-play-circle-fill me-1"></i> 开始检测';
+                            startBtn.classList.remove('btn-warning');
+                            startBtn.classList.add('btn-success');
+                        }
+
                         if (pollTimer) {
                             clearInterval(pollTimer);
                             pollTimer = null;
@@ -545,6 +582,21 @@
 
         // 批量检测（提交给后台）
         async function batchCheckStreams(udpxyUrl, batchText) {
+            // 如果是暂停状态，直接调用 resume
+            if (isTaskPaused) {
+                try {
+                    const res = await fetch('/api/task/resume', { method: 'POST' });
+                    const d = await res.json();
+                    if (d.success) {
+                        showProgress(0, 100, '任务已恢复...');
+                        startTaskPolling();
+                    } else {
+                        showCenterConfirm('恢复失败: ' + d.message, null, true);
+                    }
+                } catch(e) { console.error(e); }
+                return;
+            }
+
             // 简单的参数校验
             if (!batchText || !batchText.trim()) {
                 showCenterConfirm('请输入或加载检测地址', null, true);

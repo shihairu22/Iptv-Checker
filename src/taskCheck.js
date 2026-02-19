@@ -243,6 +243,7 @@ class TaskManager extends EventEmitter {
             this.queue.pause();
             this.queue.clear();
         }
+
         this.queue = new PQueue({ concurrency: this.task.concurrency });
 
         this.task.running = true;
@@ -256,6 +257,29 @@ class TaskManager extends EventEmitter {
             this.queue.add(() => this.runWorker(item));
         });
 
+        return true;
+    }
+
+    resume() {
+        if (!this.task.paused || this.task.running) return false;
+
+        this.task.running = true;
+        this.task.paused = false;
+        this.log('任务恢复执行 (Worker Mode)...');
+
+        // 重新初始化队列（安全起见）
+        if (this.queue) {
+            this.queue.pause();
+            this.queue.clear();
+        }
+        this.queue = new PQueue({ concurrency: this.task.concurrency });
+
+        // 只添加未完成的任务
+        for (let i = this.task.finished; i < this.task.items.length; i++) {
+            this.queue.add(() => this.runWorker(this.task.items[i]));
+        }
+
+        this.saveState();
         return true;
     }
 
