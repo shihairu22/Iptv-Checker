@@ -7,6 +7,8 @@ const streamService = require('./services/streamService');
 const { requireAuth } = require('./middleware/auth');
 const authRouter = require('./routes/auth');
 const streamRouter = require('./routes/stream');
+const taskManager = require('./taskCheck');
+const socketIo = require('socket.io');
 
 const app = express();
 const port = process.env.PORT || 8848;
@@ -67,14 +69,34 @@ async function startServer() {
         app.get('/results', (req, res) => res.sendFile(path.join(__dirname, '../public/results.html')));
 
         // 全局错误处理
+        const socketIo = require('socket.io');
+        const taskManager = require('./taskCheck');
+
+        // ... (省略中间代码) ...
+
         app.use((err, req, res, next) => {
             logger.error(`系统错误: ${err.stack}`);
             res.status(500).json({ success: false, message: '服务器内部错误' });
         });
 
-        app.listen(port, () => {
+        const server = app.listen(port, () => {
             logger.info(`服务器已在端口 ${port} 启动`);
         });
+
+        // 初始化 Socket.IO
+        const io = socketIo(server, { cors: { origin: "*" } });
+        taskManager.setIo(io);
+
+        io.on('connection', (socket) => {
+            logger.info(`客户端已连接: ${socket.id}`);
+            // 发送当前状态
+            socket.emit('task:status', taskManager.getStatus());
+
+            socket.on('disconnect', () => {
+                // logger.info(`客户端断开: ${socket.id}`);
+            });
+        });
+
     } catch (e) {
         logger.error(`启动失败: ${e.message}`);
         process.exit(1);

@@ -42,9 +42,14 @@ class TaskManager extends EventEmitter {
         this.activeWorkers = 0;
         this.queue = null; // PQueue instance
         this.resultBuffer = [];
+        this.io = null;
 
         // 初始化加载状态
         this.init().catch(err => console.error('Task init failed:', err));
+    }
+
+    setIo(io) {
+        this.io = io;
     }
 
     async init() {
@@ -62,6 +67,7 @@ class TaskManager extends EventEmitter {
         this.task.logs.unshift(line);
         if (this.task.logs.length > LOG_SIZE) this.task.logs.pop();
         console.log('[TaskManager]', msg);
+        if (this.io) this.io.emit('task:log', line);
     }
 
     async saveState() {
@@ -367,6 +373,10 @@ class TaskManager extends EventEmitter {
             const batch = [...this.resultBuffer];
             this.resultBuffer = [];
             await streamService.addStreamBatch(batch);
+        }
+        // 广播进度 (每3秒或有结果时)
+        if (this.io && (this.task.running || this.task.paused)) {
+            this.io.emit('task:progress', this.getStatus());
         }
     }
 

@@ -362,6 +362,7 @@
         </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
     <script>
         let allStreams = [];
         let detectCancel = false;
@@ -503,82 +504,84 @@
         }
         let isTaskPaused = false;
 
-        // 轮询后台任务状态
-        let pollTimer = null;
-        async function startTaskPolling() {
-            if (pollTimer) clearInterval(pollTimer);
-            pollTimer = setInterval(async () => {
-                try {
-                    const r = await fetch('/api/task/status');
-                    const task = await r.json();
+        // WebSocket 初始化
+        const socket = io();
 
-                    if (task.running || task.paused) {
-                        isTaskPaused = task.paused;
-                        const percent = task.total > 0 ? Math.round((task.finished / task.total) * 100) : 0;
-                        showProgress(task.finished, task.total,
-                            task.paused ? `任务暂停 (已完成: ${task.finished}/${task.total}) - 点击“继续检测”恢复` : `正在后台检测: ${task.finished}/${task.total} | 成功: ${task.success} 失败: ${task.fail}`);
-                        
-                        // 更新按钮状态
-                        const startBtn = document.getElementById('startDetectBtn');
-                        if(startBtn) {
-                            if (task.paused) {
-                                startBtn.innerHTML = '<i class="bi bi-play-circle-fill me-1"></i> 继续检测';
-                                startBtn.classList.remove('btn-success');
-                                startBtn.classList.add('btn-warning');
-                            } else {
-                                // 运行中，通常禁用开始按钮或显示“运行中”
-                                startBtn.innerHTML = '<i class="bi bi-activity me-1"></i> 检测中...';
-                                startBtn.classList.remove('btn-warning');
-                                startBtn.classList.add('btn-success');
-                                // startBtn.disabled = true; // 可选：禁用防止重复点击
-                            }
-                        }
+        // 监听任务状态/进度更新
+        socket.on('task:status', updateTaskUI);
+        socket.on('task:progress', updateTaskUI);
 
-                        // 自动获取最新的流列表
-                        if (task.finished % 20 === 0 || task.finished === task.total) {
-                            getStreams();
-                        }
+        // 监听日志 (可选: 如果有日志区域可以展示)
+        socket.on('task:log', (msg) => {
+            // console.log('Server Log:', msg);
+        });
 
-                        if (!task.running && !task.paused && task.finished === task.total) {
-                            clearInterval(pollTimer);
-                            pollTimer = null;
-                            showProgress(task.total, task.total, `检测完成 | 总数: ${task.total} 在线: ${task.success} 离线: ${task.fail}`);
-                            getStreams();
-                            
-                            // 恢复按钮
-                            const startBtn = document.getElementById('startDetectBtn');
-                            if(startBtn) {
-                                startBtn.innerHTML = '<i class="bi bi-play-circle-fill me-1"></i> 开始检测';
-                                startBtn.classList.remove('btn-warning');
-                                startBtn.classList.add('btn-success');
-                                // startBtn.disabled = false;
-                            }
-                            isTaskPaused = false;
-                        }
+        function updateTaskUI(task) {
+            if (!task) return;
+
+            if (task.running || task.paused) {
+                isTaskPaused = task.paused;
+                const percent = task.total > 0 ? Math.round((task.finished / task.total) * 100) : 0;
+                showProgress(task.finished, task.total,
+                    task.paused ? `任务暂停 (已完成: ${task.finished}/${task.total}) - 点击“继续检测”恢复` : `正在后台检测: ${task.finished}/${task.total} | 成功: ${task.success} 失败: ${task.fail}`);
+
+                // 更新按钮状态
+                const startBtn = document.getElementById('startDetectBtn');
+                if (startBtn) {
+                    if (task.paused) {
+                        startBtn.innerHTML = '<i class="bi bi-play-circle-fill me-1"></i> 继续检测';
+                        startBtn.classList.remove('btn-success');
+                        startBtn.classList.add('btn-warning');
                     } else {
-                        // 任务未运行
-                        isTaskPaused = false;
-                        const startBtn = document.getElementById('startDetectBtn');
-                        if(startBtn) {
-                            startBtn.innerHTML = '<i class="bi bi-play-circle-fill me-1"></i> 开始检测';
-                            startBtn.classList.remove('btn-warning');
-                            startBtn.classList.add('btn-success');
-                        }
-
-                        if (pollTimer) {
-                            clearInterval(pollTimer);
-                            pollTimer = null;
-                            hideProgress();
-                        }
+                        startBtn.innerHTML = '<i class="bi bi-activity me-1"></i> 检测中...';
+                        startBtn.classList.remove('btn-warning');
+                        startBtn.classList.add('btn-success');
                     }
-                } catch (e) {
-                    console.error('Poll failed', e);
                 }
-            }, 2000);
+
+                // 自动获取最新的流列表
+                if (task.finished % 10 === 0 || task.finished === task.total) { // 缩短更新频率以体现即时性
+                    getStreams();
+                }
+
+                if (!task.running && !task.paused && task.finished === task.total) {
+                    showProgress(task.total, task.total, `检测完成 | 总数: ${task.total} 在线: ${task.success} 离线: ${task.fail}`);
+                    getStreams();
+
+                    // 恢复按钮
+                    const startBtn = document.getElementById('startDetectBtn');
+                    if (startBtn) {
+                        startBtn.innerHTML = '<i class="bi bi-play-circle-fill me-1"></i> 开始检测';
+                        startBtn.classList.remove('btn-warning');
+                        startBtn.classList.add('btn-success');
+                    }
+                    isTaskPaused = false;
+                }
+            } else {
+                // 任务未运行
+                isTaskPaused = false;
+                const startBtn = document.getElementById('startDetectBtn');
+                if (startBtn) {
+                    startBtn.innerHTML = '<i class="bi bi-play-circle-fill me-1"></i> 开始检测';
+                    startBtn.classList.remove('btn-warning');
+                    startBtn.classList.add('btn-success');
+                }
+
+                // 只有在 UI 显示着进度条时才隐藏，避免刚加载页面就闪烁
+                const progressBarWrap = document.getElementById('progressBarWrap');
+                if (progressBarWrap && progressBarWrap.style.display !== 'none' && !task.logs?.length) {
+                    // 简单判断，如果完全没运行且没日志才隐藏。
+                    // 其实可以更简单：只要不运行，就调用 hideProgress
+                    // 但 socket 连接初次会发送 status，可能是空闲状态，导致进度条隐藏。
+                    // hideProgress(); 
+                }
+            }
         }
 
-        // 页面加载时尝试启动轮询（如果后台有任务）
-        startTaskPolling();
+        // 轮询后台任务状态 - 已移除，改用 Socket
+        // let pollTimer = null;
+        // async function startTaskPolling() { ... }
+        // startTaskPolling();
 
         // 批量检测（提交给后台）
         async function batchCheckStreams(udpxyUrl, batchText) {
@@ -589,11 +592,11 @@
                     const d = await res.json();
                     if (d.success) {
                         showProgress(0, 100, '任务已恢复...');
-                        startTaskPolling();
+                        // startTaskPolling(); // Socket 自动更新
                     } else {
                         showCenterConfirm('恢复失败: ' + d.message, null, true);
                     }
-                } catch(e) { console.error(e); }
+                } catch (e) { console.error(e); }
                 return;
             }
 
@@ -619,7 +622,7 @@
                 const data = await response.json();
                 if (data.success) {
                     showProgress(0, 100, '后台任务已启动...');
-                    startTaskPolling();
+                    // startTaskPolling(); // Socket 自动更新
                 } else {
                     showCenterConfirm('任务启动失败，可能已有任务在运行', null, true);
                 }
