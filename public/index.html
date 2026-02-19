@@ -807,6 +807,7 @@
                      <span class="badge bg-light text-dark border">FPS: ${stream.frameRate || '-'}</span>
                      <span class="badge bg-light text-dark border">Codec: ${stream.codec || '-'}</span>
                      ${stream.hdr && stream.hdr !== '-' && stream.hdr !== 'SDR' ? `<span class="badge ${stream.hdr === 'HDR10' ? 'bg-danger' : stream.hdr === 'HLG' ? 'bg-warning text-dark' : 'bg-info'}">` + stream.hdr + `</span>` : (stream.hdr === 'SDR' ? '<span class="badge bg-secondary">SDR</span>' : '')}
+                     ${stream.audio && stream.audio !== '-' ? `<span class="badge bg-light text-dark border">Audio: ${(stream.audio || '').toUpperCase()}${stream.audioChannels ? (stream.audioChannels >= 8 ? ' 7.1' : stream.audioChannels >= 6 ? ' 5.1' : ' ' + stream.audioChannels + 'ch') : ''}</span>` : ''}
                  ` : ''}
                  ${stream.groupTitle ? `<span class="badge bg-info text-dark bg-opacity-10 border border-info">Group: ${stream.groupTitle}</span>` : ''}
             </div>
@@ -1263,7 +1264,7 @@
                     });
                     const data = await resp.json();
                     finished++;
-                    showProgress(finished, totalCount, `检测: (${udpxyUrl}/rtp/${item.multicastUrl.replace('rtp://', '')}) | 分辨率:${data.resolution || '-'} | 编码:${data.codec || '-'} | ${data.hdr && data.hdr !== '-' ? data.hdr : ''} | 帧率:${data.frameRate || '-'} | ${data.isAvailable ? '✅在线' : '❌离线'}`);
+                    showProgress(finished, totalCount, `检测: (${udpxyUrl}/rtp/${item.multicastUrl.replace('rtp://', '')}) | 分辨率:${data.resolution || '-'} | 编码:${data.codec || '-'} | ${data.hdr && data.hdr !== '-' ? data.hdr : ''} | 音频:${data.audio && data.audio !== '-' ? data.audio.toUpperCase() : '-'} | 帧率:${data.frameRate || '-'} | ${data.isAvailable ? '✅在线' : '❌离线'}`);
                     if (data.success) lastSuccess = { ...data, name: '', multicastUrl: item.multicastUrl };
                     if (lastSuccess) showLastResult(lastSuccess, lastSuccess.name, lastSuccess.multicastUrl);
                 }
