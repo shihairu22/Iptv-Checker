@@ -416,8 +416,8 @@ function ffprobeCheck(fullUrl, callback) {
         return callback(cached.data);
     }
 
-    // 使用json格式输出，便于解析
-    const cmd = `ffprobe -v quiet -print_format json -select_streams v:0 -show_streams -show_programs -show_format "${fullUrl}"`;
+    // 使用json格式输出，返回所有流（视频+音频）
+    const cmd = `ffprobe -v quiet -print_format json -show_streams -show_programs -show_format "${fullUrl}"`;
     exec(cmd, { timeout: 8000 }, (error, stdout, stderr) => {
         let isAvailable = false;
         let frameRate = null;
@@ -426,37 +426,49 @@ function ffprobeCheck(fullUrl, callback) {
         let codec_name = null;
         let service_name = null;
         let hdr_type = null;
+        let audio_codec = null;
+        let audio_channels = null;
+        let audio_sample_rate = null;
         let raw = null;
         try {
             if (!error && stdout) {
                 const json = JSON.parse(stdout);
                 raw = json;
                 if (json.streams && json.streams.length > 0) {
-                    const stream = json.streams[0];
-                    isAvailable = stream.codec_type === 'video';
-                    codec_name = stream.codec_name || null;
-                    if (stream.width && stream.height) {
-                        resolution = `${stream.width}x${stream.height}`;
-                    }
-                    bitRate = stream.bit_rate ? parseInt(stream.bit_rate) : null;
-                    // 帧率
-                    if (stream.r_frame_rate && stream.r_frame_rate.includes('/')) {
-                        const [num, den] = stream.r_frame_rate.split('/').map(Number);
-                        if (!isNaN(num) && !isNaN(den) && den !== 0) {
-                            frameRate = (num / den).toFixed(2);
+                    // 查找第一个视频流
+                    const vStream = json.streams.find(s => s.codec_type === 'video');
+                    if (vStream) {
+                        isAvailable = true;
+                        codec_name = vStream.codec_name || null;
+                        if (vStream.width && vStream.height) {
+                            resolution = `${vStream.width}x${vStream.height}`;
+                        }
+                        bitRate = vStream.bit_rate ? parseInt(vStream.bit_rate) : null;
+                        // 帧率
+                        if (vStream.r_frame_rate && vStream.r_frame_rate.includes('/')) {
+                            const [num, den] = vStream.r_frame_rate.split('/').map(Number);
+                            if (!isNaN(num) && !isNaN(den) && den !== 0) {
+                                frameRate = (num / den).toFixed(2);
+                            }
+                        }
+                        // HDR/SDR 检测：通过 color_transfer 和 color_primaries 判断
+                        const ct = vStream.color_transfer || '';
+                        if (ct === 'smpte2084') {
+                            hdr_type = 'HDR10';
+                        } else if (ct === 'arib-std-b67') {
+                            hdr_type = 'HLG';
+                        } else if (vStream.color_primaries === 'bt2020') {
+                            hdr_type = 'HDR';
+                        } else {
+                            hdr_type = 'SDR';
                         }
                     }
-                    // HDR/SDR 检测：通过 color_transfer 和 color_primaries 判断
-                    const ct = stream.color_transfer || '';
-                    if (ct === 'smpte2084') {
-                        hdr_type = 'HDR10';
-                    } else if (ct === 'arib-std-b67') {
-                        hdr_type = 'HLG';
-                    } else if (stream.color_primaries === 'bt2020') {
-                        // bt2020 色域但非 HDR10/HLG，标记为 HDR
-                        hdr_type = 'HDR';
-                    } else if (isAvailable) {
-                        hdr_type = 'SDR';
+                    // 查找第一个音频流
+                    const aStream = json.streams.find(s => s.codec_type === 'audio');
+                    if (aStream) {
+                        audio_codec = aStream.codec_name || null;
+                        audio_channels = aStream.channels || null;
+                        audio_sample_rate = aStream.sample_rate || null;
                     }
                 }
                 if (json.programs && Array.isArray(json.programs)) {
@@ -488,6 +500,9 @@ function ffprobeCheck(fullUrl, callback) {
             codec: codec_name,
             serviceName: service_name,
             hdr: hdr_type,
+            audio: audio_codec,
+            audioChannels: audio_channels,
+            audioSampleRate: audio_sample_rate,
             raw // 返回原始ffprobe json数据，便于前端调试
         };
         // 缓存
@@ -502,7 +517,7 @@ app.post('/api/check-stream', async (req, res) => {
     udpxyUrl = String(udpxyUrl || '').trim();
     multicastUrl = String(multicastUrl || '').trim();
     const fullUrl = `${udpxyUrl}/rtp/${multicastUrl.replace('rtp://', '')}`;
-    ffprobeCheck(fullUrl, ({ isAvailable, frameRate, bitRate, speed, resolution, codec, serviceName, hdr, raw }) => {
+    ffprobeCheck(fullUrl, ({ isAvailable, frameRate, bitRate, speed, resolution, codec, serviceName, hdr, audio, audioChannels, audioSampleRate, raw }) => {
         // 更新或添加组播地址
         const existingIndex = multicastList.findIndex(item =>
             String(item.udpxyUrl || '').trim() === udpxyUrl && String(item.multicastUrl || '').trim() === multicastUrl
@@ -517,7 +532,10 @@ app.post('/api/check-stream', async (req, res) => {
             speed,
             resolution,
             codec,
-            hdr
+            hdr,
+            audio,
+            audioChannels,
+            audioSampleRate
         };
         if (existingIndex !== -1) {
             const prev = multicastList[existingIndex];
@@ -545,6 +563,9 @@ app.post('/api/check-stream', async (req, res) => {
             resolution: resolution || '-',
             codec: codec || '-',
             hdr: hdr || '-',
+            audio: audio || '-',
+            audioChannels: audioChannels || '-',
+            audioSampleRate: audioSampleRate || '-',
             name: existingIndex !== -1 ? multicastList[existingIndex].name : (name || serviceName || ''),
             raw, // 返回原始数据
             message: isAvailable ? '流可访问' : '流不可访问'
@@ -554,7 +575,7 @@ app.post('/api/check-stream', async (req, res) => {
 app.post('/api/check-http-stream', async (req, res) => {
     let { url, name } = req.body;
     url = String(url || '').trim();
-    ffprobeCheck(url, ({ isAvailable, frameRate, bitRate, speed, resolution, codec, serviceName, hdr, raw }) => {
+    ffprobeCheck(url, ({ isAvailable, frameRate, bitRate, speed, resolution, codec, serviceName, hdr, audio, audioChannels, audioSampleRate, raw }) => {
         const existingIndex = multicastList.findIndex(item => String(item.multicastUrl || '').trim() === url);
         const detectFields = {
             udpxyUrl: '',
@@ -566,7 +587,10 @@ app.post('/api/check-http-stream', async (req, res) => {
             speed,
             resolution,
             codec,
-            hdr
+            hdr,
+            audio,
+            audioChannels,
+            audioSampleRate
         };
         if (existingIndex !== -1) {
             const prev = multicastList[existingIndex];
@@ -594,6 +618,9 @@ app.post('/api/check-http-stream', async (req, res) => {
             resolution: resolution || '-',
             codec: codec || '-',
             hdr: hdr || '-',
+            audio: audio || '-',
+            audioChannels: audioChannels || '-',
+            audioSampleRate: audioSampleRate || '-',
             name: existingIndex !== -1 ? multicastList[existingIndex].name : (name || serviceName || ''),
             raw,
             message: isAvailable ? '流可访问' : '流不可访问'
