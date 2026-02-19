@@ -70,8 +70,32 @@ document.addEventListener('DOMContentLoaded', function () {
 // --- Socket.IO 事件 ---
 socket.on('task:status', updateTaskUI);
 socket.on('task:progress', updateTaskUI);
-socket.on('task:log', (msg) => {
-    // console.log('Server Log:', msg);
+// console.log('Server Log:', msg);
+
+// 优化: 接收增量数据更新
+socket.on('task:update_data', (batch) => {
+    if (!batch || !Array.isArray(batch)) return;
+
+    // 更新本地内存数据
+    // 建立索引映射加速查找
+    const urlMap = new Map();
+    allStreams.forEach((s, i) => {
+        const key = `${s.udpxyUrl}|${s.multicastUrl}`;
+        urlMap.set(key, i);
+    });
+
+    batch.forEach(item => {
+        const key = `${item.udpxyUrl}|${item.multicastUrl}`;
+        if (urlMap.has(key)) {
+            const idx = urlMap.get(key);
+            allStreams[idx] = { ...allStreams[idx], ...item };
+        } else {
+            allStreams.push(item);
+        }
+    });
+
+    // 刷新显示 (防抖)
+    updateStatsAndDisplay();
 });
 
 function updateTaskUI(task) {
@@ -97,10 +121,10 @@ function updateTaskUI(task) {
             }
         }
 
-        // 自动获取最新的流列表
-        if (task.finished % 10 === 0 || task.finished === task.total) {
-            getStreams();
-        }
+        // 优化: 移除全量拉取，改用 task:update_data 增量更新
+        // if (task.finished % 10 === 0 || task.finished === task.total) {
+        //     getStreams();
+        // }
 
         if (!task.running && !task.paused && task.finished === task.total) {
             showProgress(task.total, task.total, `检测完成 | 总数: ${task.total} 在线: ${task.success} 离线: ${task.fail}`);

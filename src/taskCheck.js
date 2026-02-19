@@ -427,6 +427,11 @@ class TaskManager extends EventEmitter {
             const batch = [...this.resultBuffer];
             this.resultBuffer = [];
             await streamService.addStreamBatch(batch);
+
+            // 优化: 广播增量数据更新，避免前端全量拉取
+            if (this.io && (this.task.running || this.task.paused)) {
+                this.io.emit('task:update_data', batch);
+            }
         }
         // 广播进度 (每3秒或有结果时)
         if (this.io && (this.task.running || this.task.paused)) {
