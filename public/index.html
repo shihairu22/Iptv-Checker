@@ -178,13 +178,13 @@
                                             <option value="1">1</option>
                                             <option value="2">2</option>
                                             <option value="3">3</option>
-                                            <option value="4">4</option>
-                                            <option value="5" selected>5</option>
-                                            <option value="6">6</option>
-                                            <option value="7">7</option>
-                                            <option value="8">8</option>
-                                            <option value="9">9</option>
-                                            <option value="10">10</option>
+                                            <option value="5">5</option>
+                                            <option value="10" selected>10</option>
+                                            <option value="15">15</option>
+                                            <option value="20">20</option>
+                                            <option value="30">30</option>
+                                            <option value="40">40</option>
+                                            <option value="50">50</option>
                                         </select>
                                     </div>
                                 </div>
@@ -806,6 +806,7 @@
                      <span class="badge bg-light text-dark border">Resolution: ${stream.resolution || '-'}</span>
                      <span class="badge bg-light text-dark border">FPS: ${stream.frameRate || '-'}</span>
                      <span class="badge bg-light text-dark border">Codec: ${stream.codec || '-'}</span>
+                     ${stream.hdr && stream.hdr !== '-' && stream.hdr !== 'SDR' ? `<span class="badge ${stream.hdr === 'HDR10' ? 'bg-danger' : stream.hdr === 'HLG' ? 'bg-warning text-dark' : 'bg-info'}">` + stream.hdr + `</span>` : (stream.hdr === 'SDR' ? '<span class="badge bg-secondary">SDR</span>' : '')}
                  ` : ''}
                  ${stream.groupTitle ? `<span class="badge bg-info text-dark bg-opacity-10 border border-info">Group: ${stream.groupTitle}</span>` : ''}
             </div>
@@ -1262,7 +1263,7 @@
                     });
                     const data = await resp.json();
                     finished++;
-                    showProgress(finished, totalCount, `检测: (${udpxyUrl}/rtp/${item.multicastUrl.replace('rtp://', '')}) | 分辨率:${data.resolution || '-'} | 编码:${data.codec || '-'} | 帧率:${data.frameRate || '-'} | ${data.isAvailable ? '✅在线' : '❌离线'}`);
+                    showProgress(finished, totalCount, `检测: (${udpxyUrl}/rtp/${item.multicastUrl.replace('rtp://', '')}) | 分辨率:${data.resolution || '-'} | 编码:${data.codec || '-'} | ${data.hdr && data.hdr !== '-' ? data.hdr : ''} | 帧率:${data.frameRate || '-'} | ${data.isAvailable ? '✅在线' : '❌离线'}`);
                     if (data.success) lastSuccess = { ...data, name: '', multicastUrl: item.multicastUrl };
                     if (lastSuccess) showLastResult(lastSuccess, lastSuccess.name, lastSuccess.multicastUrl);
                 }
