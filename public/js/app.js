@@ -878,31 +878,59 @@ function bindUIEvents() {
 
     if (applyCidrBtn) applyCidrBtn.addEventListener('click', function () {
         const cidr = document.getElementById('cidrInput').value.trim();
-        const portVal = document.getElementById('portInput')?.value.trim();
-        let ports = parsePorts(portVal);
-        if (ports.length === 0) ports = [9000];
-
         const rng = parseCIDR(cidr);
-        if (!rng) {
-            showCenterConfirm('CIDR格式不正确，示例：239.76.250.1/24', null, true);
-            return;
+        if (rng) {
+            document.getElementById('rangeStart').value = rng.start;
+            document.getElementById('rangeEnd').value = rng.end;
+            updateRangeSummary();
+            showCenterConfirm('CIDR已转换为IP范围', null, true);
+        } else {
+            showCenterConfirm('CIDR格式不正确，例如: 192.168.1.0/24', null, true);
         }
-
-        const startEl = document.getElementById('rangeStart');
-        const endEl = document.getElementById('rangeEnd');
-        if (startEl) startEl.value = `rtp://${rng.start}:${ports[0]}`;
-        if (endEl) endEl.value = `rtp://${rng.end}:${ports[0]}`;
-
-        updateRangeSummary();
     });
 
     if (clearCidrBtn) clearCidrBtn.addEventListener('click', function () {
-        ['rangeStart', 'rangeEnd', 'cidrInput', 'rangeSummary'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.value = '';
-        });
-        showStatusInfo('');
+        document.getElementById('cidrInput').value = '';
+        document.getElementById('rangeStart').value = '';
+        document.getElementById('rangeEnd').value = '';
+        updateRangeSummary();
     });
+
+    const bodyObserver = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                if (document.body.classList.contains('modal-open')) {
+                    document.body.style.paddingRight = '0px';
+                }
+            }
+        });
+    });
+    bodyObserver.observe(document.body, { attributes: true });
+
+    // 修复模态框关闭后背景不可滚动问题
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.addEventListener('hidden.bs.modal', function () {
+            if (document.querySelectorAll('.modal.show').length === 0) {
+                document.body.classList.remove('modal-open');
+                document.body.style.paddingRight = '';
+                const backdrop = document.querySelector('.modal-backdrop');
+                if (backdrop) backdrop.remove();
+            }
+        });
+    });
+
+    // 版本快照绑定
+    const saveId = document.getElementById('saveBtnIndex') || document.getElementById('saveBtn');
+    if (saveId) saveId.onclick = persistSave;
+    const loadId = document.getElementById('loadBtnIndex') || document.getElementById('loadBtn');
+    if (loadId) loadId.onclick = loadSelectedVersion;
+    const delId = document.getElementById('deletePersistBtnIndex') || document.getElementById('deletePersistBtn');
+    if (delId) delId.onclick = deleteSelectedVersion;
+    const refreshId = document.getElementById('refreshVersionsBtnIndex') || document.getElementById('refreshVersionsBtn');
+    if (refreshId) refreshId.onclick = refreshVersions;
+
+    // 初始化版本列表
+    refreshVersions();
 
     // 绑定更新与退出
     window.doLogout = async function () {
@@ -963,8 +991,118 @@ async function loadFromNetwork() {
         updateInputCount();
         const okCount = texts.length;
         const failCount = urls.length - okCount;
-        showCenterConfirm(`网络源：成功${okCount} 失败${failCount}；解析到地址：${items.length} 条`, null, true);
+        showCenterConfirm('网络源：成功' + okCount + ' 失败' + failCount + '；解析到地址：' + items.length + ' 条', null, true);
     } catch (e) {
         showCenterConfirm('加载网络文件失败（代理错误或网络问题）', null, true);
     }
 }
+
+// === 版本快照 (Persistence) ===
+async function refreshVersions() {
+    try {
+        const res = await fetch('/api/persist/list');
+        const data = await res.json();
+        const sel1 = document.getElementById('versionsSelectIndex');
+        const sel2 = document.getElementById('versionsSelect');
+        const v = sel1 ? sel1.value : (sel2 ? sel2.value : null);
+
+        let html = '';
+        if (data.success && data.backups) {
+            data.backups.forEach(b => {
+                const date = new Date(b.time).toLocaleString();
+                html += `<option value="${b.file}">${b.file} (${date})</option>`;
+            });
+        }
+        if (sel1) { sel1.innerHTML = html; if (v) sel1.value = v; }
+        if (sel2) { sel2.innerHTML = html; if (v) sel2.value = v; }
+    } catch (e) {
+        console.error('Failed to refresh versions:', e);
+    }
+}
+
+function persistSave() {
+    showCenterConfirm('确定将当前的所有配置和数据备份存档吗？', async function (ok) {
+        if (!ok) return;
+        try {
+            const res = await fetch('/api/persist/save', { method: 'POST' });
+            const data = await res.json();
+            if (data.success) {
+                showCenterConfirm('备份成功', null, true);
+                refreshVersions();
+            } else {
+                showCenterConfirm('备份失败: ' + data.message, null, true);
+            }
+        } catch (e) {
+            console.error(e);
+            showCenterConfirm('网络错误', null, true);
+        }
+    });
+}
+
+async function persistLoad() {
+    try {
+        const res = await fetch('/api/persist/load', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            getStreams(); // refresh list
+            showCenterConfirm('已重新加载最新流数据', null, true);
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+function loadSelectedVersion() {
+    const sel1 = document.getElementById('versionsSelectIndex');
+    const sel2 = document.getElementById('versionsSelect');
+    const v = sel1 && sel1.value ? sel1.value : (sel2 ? sel2.value : null);
+    if (!v) { showCenterConfirm('请先选择一个离线版本', null, true); return; }
+
+    showCenterConfirm(`警告：加载历史版本 [${v}] 将会覆盖当前的所有流数据，并且此操作不可撤销。\n\n您确定要覆盖吗？`, async function (ok) {
+        if (!ok) return;
+        try {
+            const res = await fetch('/api/persist/load-version', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: v })
+            });
+            const data = await res.json();
+            if (data.success) {
+                showCenterConfirm('版本已恢复', null, true);
+                getStreams();
+            } else {
+                showCenterConfirm('恢复失败: ' + data.message, null, true);
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    });
+}
+
+function deleteSelectedVersion() {
+    const sel1 = document.getElementById('versionsSelectIndex');
+    const sel2 = document.getElementById('versionsSelect');
+    const v = sel1 && sel1.value ? sel1.value : (sel2 ? sel2.value : null);
+    if (!v) { showCenterConfirm('请先选择一个离线版本', null, true); return; }
+
+    showCenterConfirm(`确定删除该历史版本 [${v}] 吗？`, async function (ok) {
+        if (!ok) return;
+        try {
+            const res = await fetch('/api/persist/delete-version', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: v })
+            });
+            const data = await res.json();
+            if (data.success) {
+                showCenterConfirm('已删除版本', null, true);
+                refreshVersions();
+            } else {
+                showCenterConfirm('删除失败: ' + data.message, null, true);
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    });
+}
+

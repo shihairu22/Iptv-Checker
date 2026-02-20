@@ -7,6 +7,7 @@ const streamService = require('./services/streamService');
 const { requireAuth } = require('./middleware/auth');
 const authRouter = require('./routes/auth');
 const streamRouter = require('./routes/stream');
+const persistRouter = require('./routes/persist');
 const taskManager = require('./taskCheck');
 const socketIo = require('socket.io');
 
@@ -60,6 +61,7 @@ async function startServer() {
 
         // 业务路由
         app.use('/api', streamRouter);
+        app.use('/api/persist', persistRouter);
 
         // 静态资源
         app.use(express.static('public'));

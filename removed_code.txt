@@ -1,0 +1,739 @@
+diff --git a/public/index.html b/public/index.html
+index dc26880..700f131 100644
+--- a/public/index.html
++++ b/public/index.html
+@@ -291,31 +291,7 @@
+                         <input class="form-control border-start-0 ps-0" id="searchInput" placeholder="????...">
+                     </div>
+ 
+-                    <div class="dropdown">
+-                        <button class="btn btn-outline-primary dropdown-toggle" type="button" id="exportDropdown"
+-                            data-bs-toggle="dropdown">
+-                            <i class="bi bi-box-arrow-up me-1"></i> ??
+-                        </button>
+-                        <ul class="dropdown-menu dropdown-menu-end shadow">
+-                            <li class="px-3 py-2">
+-                                <div class="form-check form-check-inline">
+-                                    <input class="form-check-input" type="checkbox" id="exportOnline" checked>
+-                                    <label class="form-check-label" for="exportOnline">??</label>
+-                                </div>
+-                                <div class="form-check form-check-inline">
+-                                    <input class="form-check-input" type="checkbox" id="exportOffline">
+-                                    <label class="form-check-label" for="exportOffline">??</label>
+-                                </div>
+-                            </li>
+-                            <li>
+-                                <hr class="dropdown-divider">
+-                            </li>
+-                            <li><button class="dropdown-item" onclick="exportData('txt');return false;"><i
+-                                        class="bi bi-file-text me-2"></i>?? TXT</button></li>
+-                            <li><button class="dropdown-item" onclick="exportData('m3u');return false;"><i
+-                                        class="bi bi-file-earmark-play me-2"></i>?? M3U</button></li>
+-                        </ul>
+-                    </div>
++
+                 </div>
+             </div>
+ 
+diff --git a/public/results.html b/public/results.html
+index 68c1b76..323421e 100644
+--- a/public/results.html
++++ b/public/results.html
+@@ -274,17 +274,7 @@
+       <div class="card-body">
+         <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+           <div class="d-flex align-items-center gap-2 flex-wrap">
+-            <h5 class="mb-0 fw-bold me-3 text-secondary"><i class="bi bi-hdd me-2"></i>????</h5>
+-            <div class="input-group input-group-sm shadow-sm">
+-              <button class="btn btn-outline-success btn-icon" id="saveBtn" title="??"><i
+-                  class="bi bi-hdd-fill"></i></button>
+-              <button class="btn btn-outline-primary btn-icon" id="loadBtn" title="??"><i
+-                  class="bi bi-folder2-open"></i></button>
+-              <button class="btn btn-outline-danger btn-icon" id="deletePersistBtn" title="??"><i
+-                  class="bi bi-trash-fill"></i></button>
+-              <button class="btn btn-outline-secondary btn-icon" id="refreshVersionsBtn" title="??"><i
+-                  class="bi bi-arrow-repeat"></i></button>
+-            </div>
++            <h5 class="mb-0 fw-bold me-3 text-secondary"><i class="bi bi-hdd me-2"></i>????</h5>
+           </div>
+ 
+           <div class="d-flex align-items-center gap-3">
+@@ -292,8 +282,6 @@
+               <input class="form-check-input" type="checkbox" id="netScopeSwitchR">
+               <label class="form-check-label" for="netScopeSwitchR" id="netScopeLabelR">????</label>
+             </div>
+-            <select class="form-select form-select-sm" id="versionsSelect"
+-              style="max-width: 320px; min-width: 260px;"></select>
+           </div>
+         </div>
+       </div>
+@@ -320,91 +308,88 @@
+             </div>
+           </div>
+ 
+-          <div class="d-flex flex-wrap gap-2 align-items-center">
+-            <button class="btn btn-sm btn-outline-dark" id="fccBtn">FCC</button>
+-            <button class="btn btn-sm btn-outline-dark" id="groupBtn">??</button>
+-            <button class="btn btn-sm btn-outline-dark" id="logoBtn">??</button>
+-            <button class="btn btn-sm btn-outline-dark" id="proxyBtn">??</button>
+-            <button class="btn btn-sm btn-outline-dark" id="apiLinksBtn">??</button>
+-            <button class="btn btn-sm btn-outline-dark" id="epgBtn">EPG</button>
+-          </div>
++          <button class="btn btn-sm btn-outline-dark" id="fccBtn">FCC</button>
++          <button class="btn btn-sm btn-outline-dark" id="groupBtn">??</button>
++          <button class="btn btn-sm btn-outline-dark" id="logoBtn">??</button>
++          <button class="btn btn-sm btn-outline-dark" id="proxyBtn">??</button>
++          <button class="btn btn-sm btn-outline-dark" id="epgBtn">EPG</button>
+         </div>
++      </div>
+ 
+-        <!-- Search and Actions -->
+-        <div class="p-3 d-flex flex-wrap gap-3 align-items-center justify-content-between border-bottom">
+-          <div class="input-group" style="max-width: 400px;">
+-            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+-            <input class="form-control border-start-0 ps-0" id="searchInputResults" placeholder="??: ??/??/??/tvg/FCC">
+-          </div>
++      <!-- Search and Actions -->
++      <div class="p-3 d-flex flex-wrap gap-3 align-items-center justify-content-between border-bottom">
++        <div class="input-group" style="max-width: 400px;">
++          <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
++          <input class="form-control border-start-0 ps-0" id="searchInputResults" placeholder="??: ??/??/??/tvg/FCC">
++        </div>
+ 
+-          <div class="d-flex align-items-center gap-2">
+-            <select class="form-select form-select-sm" id="resPageSizeSelect" style="width: auto; min-width: 110px;">
+-              <option value="20" selected>20?/?</option>
+-              <option value="50">50?/?</option>
+-              <option value="100">100?/?</option>
+-              <option value="200">200?/?</option>
+-              <option value="all">????</option>
+-            </select>
+-            <span id="resPageInfo" class="text-muted small mx-2"></span>
+-            <div class="btn-group btn-group-sm">
+-              <button class="btn btn-outline-secondary" id="resPrevPageBtn"><i class="bi bi-chevron-left"></i></button>
+-              <button class="btn btn-outline-secondary" id="resNextPageBtn"><i class="bi bi-chevron-right"></i></button>
+-            </div>
+-            <button class="btn btn-outline-danger btn-sm ms-2" id="batchDeleteBtnResults"><i
+-                class="bi bi-trash"></i>??</button>
++        <div class="d-flex align-items-center gap-2">
++          <select class="form-select form-select-sm" id="resPageSizeSelect" style="width: auto; min-width: 110px;">
++            <option value="20" selected>20?/?</option>
++            <option value="50">50?/?</option>
++            <option value="100">100?/?</option>
++            <option value="200">200?/?</option>
++            <option value="all">????</option>
++          </select>
++          <span id="resPageInfo" class="text-muted small mx-2"></span>
++          <div class="btn-group btn-group-sm">
++            <button class="btn btn-outline-secondary" id="resPrevPageBtn"><i class="bi bi-chevron-left"></i></button>
++            <button class="btn btn-outline-secondary" id="resNextPageBtn"><i class="bi bi-chevron-right"></i></button>
+           </div>
++          <button class="btn btn-outline-danger btn-sm ms-2" id="batchDeleteBtnResults"><i
++              class="bi bi-trash"></i>??</button>
+         </div>
++      </div>
+ 
+-        <div class="table-responsive">
+-          <table class="table table-hover table-striped align-middle mb-0" style="font-size: 0.9rem;">
+-            <thead class="bg-light text-secondary">
+-              <tr>
+-                <th class="col-select ps-3"><input class="form-check-input" type="checkbox" id="selectAllResPage"></th>
+-                <th class="col-status">??</th>
+-                <th class="col-type">??</th>
+-                <th class="col-name" id="thName" style="cursor:pointer;">?? <i
+-                    class="bi bi-arrow-down-up small text-muted"></i></th>
+-                <th class="col-resolution" id="thResolution" style="cursor:pointer;">???</th>
+-                <th class="col-fps" id="thFrameRate" style="cursor:pointer;">??</th>
+-                <th class="col-codec" id="thCodec" style="cursor:pointer;">??</th>
+-                <th class="col-group" id="thGroupTitle" style="cursor:pointer;">??</th>
+-                <th class="col-logo">??</th>
+-                <th class="col-addr" id="thAddr">??</th>
+-                <th class="col-http">FCC???</th>
+-                <th class="col-ops pe-3">??</th>
+-              </tr>
+-            </thead>
+-            <tbody id="resultsTbody"></tbody>
+-          </table>
+-        </div>
++      <div class="table-responsive">
++        <table class="table table-hover table-striped align-middle mb-0" style="font-size: 0.9rem;">
++          <thead class="bg-light text-secondary">
++            <tr>
++              <th class="col-select ps-3"><input class="form-check-input" type="checkbox" id="selectAllResPage"></th>
++              <th class="col-status">??</th>
++              <th class="col-type">??</th>
++              <th class="col-name" id="thName" style="cursor:pointer;">?? <i
++                  class="bi bi-arrow-down-up small text-muted"></i></th>
++              <th class="col-resolution" id="thResolution" style="cursor:pointer;">???</th>
++              <th class="col-fps" id="thFrameRate" style="cursor:pointer;">??</th>
++              <th class="col-codec" id="thCodec" style="cursor:pointer;">??</th>
++              <th class="col-group" id="thGroupTitle" style="cursor:pointer;">??</th>
++              <th class="col-logo">??</th>
++              <th class="col-addr" id="thAddr">??</th>
++              <th class="col-http">FCC???</th>
++              <th class="col-ops pe-3">??</th>
++            </tr>
++          </thead>
++          <tbody id="resultsTbody"></tbody>
++        </table>
++      </div>
+ 
+-        <!-- Bottom Pagination -->
+-        <div class="p-3 border-top d-flex justify-content-between align-items-center bg-light">
+-          <div class="d-flex align-items-center gap-2">
+-            <input class="form-check-input" type="checkbox" id="selectAllResPageBottom">
+-            <label class="form-check-label text-muted small" for="selectAllResPageBottom">??</label>
+-            <button class="btn btn-outline-danger btn-sm ms-3" id="batchDeleteBtnResultsB"><i
+-                class="bi bi-trash me-1"></i>??</button>
+-          </div>
++      <!-- Bottom Pagination -->
++      <div class="p-3 border-top d-flex justify-content-between align-items-center bg-light">
++        <div class="d-flex align-items-center gap-2">
++          <input class="form-check-input" type="checkbox" id="selectAllResPageBottom">
++          <label class="form-check-label text-muted small" for="selectAllResPageBottom">??</label>
++          <button class="btn btn-outline-danger btn-sm ms-3" id="batchDeleteBtnResultsB"><i
++              class="bi bi-trash me-1"></i>??</button>
++        </div>
+ 
+-          <div class="d-flex align-items-center gap-2">
+-            <select class="form-select form-select-sm" id="resPageSizeSelectB" style="width: auto; min-width: 110px;">
+-              <option value="20" selected>20?/?</option>
+-              <option value="50">50?/?</option>
+-              <option value="100">100?/?</option>
+-              <option value="all">????</option>
+-            </select>
+-            <span id="resPageInfoB" class="text-muted small mx-2"></span>
+-            <div class="btn-group btn-group-sm">
+-              <button class="btn btn-outline-secondary" id="resPrevPageBtnB"><i class="bi bi-chevron-left"></i></button>
+-              <button class="btn btn-outline-secondary" id="resNextPageBtnB"><i
+-                  class="bi bi-chevron-right"></i></button>
+-            </div>
++        <div class="d-flex align-items-center gap-2">
++          <select class="form-select form-select-sm" id="resPageSizeSelectB" style="width: auto; min-width: 110px;">
++            <option value="20" selected>20?/?</option>
++            <option value="50">50?/?</option>
++            <option value="100">100?/?</option>
++            <option value="all">????</option>
++          </select>
++          <span id="resPageInfoB" class="text-muted small mx-2"></span>
++          <div class="btn-group btn-group-sm">
++            <button class="btn btn-outline-secondary" id="resPrevPageBtnB"><i class="bi bi-chevron-left"></i></button>
++            <button class="btn btn-outline-secondary" id="resNextPageBtnB"><i class="bi bi-chevron-right"></i></button>
+           </div>
+         </div>
+       </div>
+     </div>
+   </div>
++  </div>
+ 
+   <script>
+     let streams = [];
+@@ -540,229 +525,7 @@
+       modal.style.display = 'block';
+       modal.querySelector('.modal').classList.add('show');
+     }
+-    function showCenterLinks(title, links) {
+-      let modal = document.getElementById('centerModalLinksR');
+-      if (!modal) {
+-        modal = document.createElement('div');
+-        modal.id = 'centerModalLinksR';
+-        modal.innerHTML = '<div class="modal fade" tabindex="-1" style="display:block;background:rgba(0,0,0,0.5);z-index:10001;"><div class="modal-dialog modal-dialog-centered modal-xl"><div class="modal-content border-0 shadow-lg" style="border-radius:12px;"><div class="modal-header border-bottom-0 pb-0"><h5 class="modal-title fw-bold text-dark" id="centerModalLinksTitleR"></h5><button type="button" class="btn-close" id="centerModalLinksCloseR"></button></div><div class="modal-body pt-2 pb-4 px-4"><div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4 bg-light p-3 rounded-3"><div class="text-secondary small d-flex align-items-center"><i class="bi bi-info-circle me-2 fs-5 text-primary"></i><span>???????????????????????????????????????????token??????????</span></div><div class="d-flex flex-wrap align-items-center gap-3"><div class="d-flex align-items-center"><label for="centerLinksStatusSelect" class="text-muted small me-2 fw-bold">??:</label><select class="form-select form-select-sm border-0 shadow-sm" id="centerLinksStatusSelect" style="min-width:140px;"><option value="all">????</option><option value="online" selected>????</option><option value="offline">????</option></select></div><div class="d-flex align-items-center"><label for="centerLinksScopeSelect" class="text-muted small me-2 fw-bold">??:</label><select class="form-select form-select-sm border-0 shadow-sm" id="centerLinksScopeSelect" style="min-width:120px;"><option value="internal" selected>??</option><option value="external">??</option></select></div><div class="d-flex align-items-center gap-2"><div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" id="centerLinksTokenSwitch"><label class="form-check-label small text-muted fw-bold" for="centerLinksTokenSwitch">Token??</label></div><div class="input-group input-group-sm shadow-sm" style="width:auto;"><input type="text" class="form-control border-0" id="centerLinksToken" placeholder="????" style="max-width: 120px;" title="???????"><button class="btn btn-outline-secondary bg-white" type="button" id="centerLinksTokenRand" title="????Token"><i class="bi bi-shuffle"></i></button></div></div></div></div><div id="centerModalLinksBodyR" class="api-links-grid"></div></div></div></div></div>';
+-        document.body.appendChild(modal);
+-        document.getElementById('centerModalLinksCloseR').onclick = function () { modal.style.display = 'none'; modal.querySelector('.modal').classList.remove('show'); };
+-        var ctrlRow = modal.querySelector('.modal-body .d-flex.flex-wrap.align-items-center.gap-3');
+-        if (ctrlRow && !document.getElementById('centerLinksFmtSelect')) {
+-          var protoBlock = document.createElement('div');
+-          protoBlock.className = 'd-flex align-items-center';
+-          protoBlock.innerHTML = '<label for="centerLinksProtoSelect" class="text-muted small me-2 fw-bold">??:</label><select class="form-select form-select-sm border-0 shadow-sm" id="centerLinksProtoSelect" style="min-width:140px;"><option value="http" selected>HTTP ??</option><option value="rtsp">RTSP ??</option></select>';
+-          var fmtBlock = document.createElement('div');
+-          fmtBlock.className = 'd-flex align-items-center';
+-          fmtBlock.innerHTML = '<label for="centerLinksFmtSelect" class="text-muted small me-2 fw-bold">??:</label><select class="form-select form-select-sm border-0 shadow-sm" id="centerLinksFmtSelect" style="min-width:220px;"><option value="default">?????</option><option value="ku9" selected>?9?UTC YYYYMMDD+HHmmss?</option><option value="mytv">mytv?{utc:yyyyMMddHHmmss}?</option><option value="playseek">playseek?YYYYMMDDHHmmss-YYYYMMDDHHmmss?</option><option value="startend14">starttime/endtime?YYYYMMDDHHmmss?</option><option value="beginend14">begin/end?YYYYMMDDHHmmss?</option><option value="iso8601">ISO8601?UTC?RFC3339?</option><option value="npt">NPT?HH:MM:SS-HH:MM:SS?</option><option value="rtsp_range">RTSP Range??? NPT ???</option><option value="unix_s">Unix ???</option><option value="unix_ms">Unix ????</option></select>';
+-          var scopeSelEl = modal.querySelector('#centerLinksScopeSelect');
+-          var scopeGroup = scopeSelEl ? scopeSelEl.closest('.d-flex.align-items-center') : null;
+-          function insertAfter(newNode, referenceNode) {
+-            if (!referenceNode || !referenceNode.parentNode) { ctrlRow.appendChild(newNode); return; }
+-            var parent = referenceNode.parentNode;
+-            if (referenceNode.nextSibling) parent.insertBefore(newNode, referenceNode.nextSibling);
+-            else parent.appendChild(newNode);
+-          }
+-          if (scopeGroup && scopeGroup.parentElement === ctrlRow) {
+-            insertAfter(protoBlock, scopeGroup);
+-            insertAfter(fmtBlock, protoBlock);
+-          } else {
+-            ctrlRow.appendChild(protoBlock);
+-            ctrlRow.appendChild(fmtBlock);
+-          }
+-        }
+-        ; (function () {
+-          var ctrlRow = modal.querySelector('.modal-body .d-flex.flex-wrap.align-items-center.gap-3');
+-          var tokenSwitchEl = modal.querySelector('#centerLinksTokenSwitch');
+-          var tokenGroup = tokenSwitchEl ? tokenSwitchEl.closest('.d-flex.align-items-center.gap-2') : null;
+-          var statusSelEl = modal.querySelector('#centerLinksStatusSelect');
+-          var scopeSelEl = modal.querySelector('#centerLinksScopeSelect');
+-          var statusGroup = statusSelEl ? statusSelEl.closest('.d-flex.align-items-center') : null;
+-          var scopeGroup = scopeSelEl ? scopeSelEl.closest('.d-flex.align-items-center') : null;
+-          var protoBlock = modal.querySelector('#centerLinksProtoSelect') ? modal.querySelector('#centerLinksProtoSelect').closest('.d-flex.align-items-center') : null;
+-          var fmtBlock = modal.querySelector('#centerLinksFmtSelect') ? modal.querySelector('#centerLinksFmtSelect').closest('.d-flex.align-items-center') : null;
+-          if (!ctrlRow || !tokenGroup) return;
+-          var breakEl = modal.querySelector('#centerLinksRowBreak');
+-          if (!breakEl) { breakEl = document.createElement('div'); breakEl.id = 'centerLinksRowBreak'; breakEl.className = 'w-100'; }
+-          function insertAfter(newNode, referenceNode) {
+-            if (!referenceNode || !referenceNode.parentNode) { ctrlRow.appendChild(newNode); return; }
+-            var parent = referenceNode.parentNode;
+-            if (referenceNode.nextSibling) parent.insertBefore(newNode, referenceNode.nextSibling);
+-            else parent.appendChild(newNode);
+-          }
+-          insertAfter(breakEl, tokenGroup);
+-          if (statusGroup) insertAfter(statusGroup, breakEl);
+-          if (scopeGroup) insertAfter(scopeGroup, statusGroup || breakEl);
+-          if (protoBlock) insertAfter(protoBlock, scopeGroup || statusGroup || breakEl);
+-          if (fmtBlock) insertAfter(fmtBlock, protoBlock || scopeGroup || statusGroup || breakEl);
+-        })();
+-      }
+-      var titleEl = document.getElementById('centerModalLinksTitleR');
+-      var bodyEl = document.getElementById('centerModalLinksBodyR');
+-      var statusSel = document.getElementById('centerLinksStatusSelect');
+-      var scopeSel = document.getElementById('centerLinksScopeSelect');
+-      var protoSel = document.getElementById('centerLinksProtoSelect');
+-      var fmtSel = document.getElementById('centerLinksFmtSelect');
+-      var tokenInput = document.getElementById('centerLinksToken');
+-      var tokenSwitch = document.getElementById('centerLinksTokenSwitch');
+-      var tokenRand = document.getElementById('centerLinksTokenRand');
+-
+-      if (titleEl) titleEl.textContent = title || 'API??';
+-
+-      // Load token settings
+-      if (tokenInput && tokenSwitch) {
+-        tokenInput.value = appSettings ? (appSettings.securityToken || '') : '';
+-        tokenSwitch.checked = appSettings ? !!appSettings.enableToken : false;
+-
+-        const saveSettings = function () {
+-          if (appSettings) {
+-            appSettings.securityToken = tokenInput.value.trim();
+-            appSettings.enableToken = tokenSwitch.checked;
+-            fetch('/api/config/app-settings', {
+-              method: 'POST',
+-              headers: { 'Content-Type': 'application/json' },
+-              body: JSON.stringify(appSettings)
+-            }).catch(() => { });
+-          }
+-          renderLinks(statusSel ? (statusSel.value || 'online') : 'online');
+-        };
+-
+-        tokenInput.onchange = saveSettings;
+-        tokenSwitch.onchange = saveSettings;
+ 
+-        if (tokenRand) {
+-          tokenRand.onclick = function () {
+-            const rand = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+-            tokenInput.value = rand;
+-            saveSettings();
+-          };
+-        }
+-      }
+-
+-      function buildLinks(status, scope) {
+-        var f = fmtSel ? (fmtSel.value || 'ku9') : 'ku9';
+-        var p = protoSel ? (protoSel.value || 'http') : 'http';
+-        var labelMap = {
+-          'default': 'M3U???????',
+-          'ku9': 'M3U??9?????',
+-          'mytv': 'M3U?mytv?????',
+-          'playseek': 'M3U?playseek ?????',
+-          'startend14': 'M3U?starttime/endtime ?????',
+-          'beginend14': 'M3U?begin/end ?????',
+-          'iso8601': 'M3U?ISO8601 ?????',
+-          'npt': 'M3U?NPT ?????',
+-          'rtsp_range': 'M3U?RTSP Range/NPT ???',
+-          'unix_s': 'M3U?Unix ????',
+-          'unix_ms': 'M3U?Unix ?????'
+-        };
+-        return [
+-          { label: labelMap['default'], href: '/api/export/m3u?status=' + status + '&fmt=default&scope=' + scope },
+-          { label: labelMap[f] || 'M3U', href: '/api/export/m3u?status=' + status + '&fmt=' + encodeURIComponent(f) + '&scope=' + scope + '&proto=' + encodeURIComponent(p) },
+-          { label: 'TXT', href: '/api/export/txt?status=' + status + '&scope=' + scope },
+-          { label: 'JSON', href: '/api/export/json?status=' + status + '&scope=' + scope }
+-        ];
+-      }
+-      function renderLinks(status) {
+-        if (!bodyEl) return;
+-        function getApiBase(scopeVal) {
+-          try {
+-            const iu = localStorage.getItem('internalUrl') || (appSettings.internalUrl || '');
+-            const eu = localStorage.getItem('externalUrl') || (appSettings.externalUrl || '');
+-            if (scopeVal === 'external') return eu && /^https?:\/\//i.test(eu) ? eu : location.origin;
+-            return iu && /^https?:\/\//i.test(iu) ? iu : location.origin;
+-          } catch (e) { return location.origin; }
+-        }
+-        const scopeVal = scopeSel ? (scopeSel.value || 'internal') : 'internal';
+-        const arr = buildLinks(status, scopeVal);
+-
+-        // Only use token if enabled AND scope is external
+-        const useToken = tokenSwitch && tokenSwitch.checked && scopeVal === 'external';
+-        const token = (useToken && tokenInput) ? (tokenInput.value.trim()) : '';
+-
+-        bodyEl.innerHTML = arr.map(l => {
+-          const base = getApiBase(scopeVal);
+-          const href = l.href.startsWith('http') ? l.href : (base + l.href);
+-          let label = l.label || href;
+-          const badge = href.includes('m3u') ? 'M3U' : (href.includes('txt') ? 'TXT' : (href.includes('json') ? 'JSON' : '??'));
+-
+-          function addParam(u, k, v) { return u + (u.includes('?') ? '&' : '?') + k + '=' + encodeURIComponent(v); }
+-
+-          let finalHref = href;
+-          if (token) {
+-            finalHref = addParam(finalHref, 'token', token);
+-          }
+-
+-          const cleanedHref = (badge === 'M3U') ? addParam(finalHref, 'stripSuffix', '1') : finalHref;
+-          const potHref = 'potplayer://' + cleanedHref;
+-          const playBtn = (badge === 'M3U') ? ('<a class="btn btn-sm btn-outline-primary" href="' + potHref + '"><i class="bi bi-play-fill me-1"></i>??</a>') : '';
+-          return '<div class="api-link-item"><div class="api-link-head"><div class="api-link-label">' + label + '</div><span class="api-link-badge">' + badge + '</span></div><div class="api-link-url" title="' + finalHref + '">' + finalHref + '</div><div class="api-link-actions"><button class="btn btn-sm btn-outline-secondary btn-copy" data-href="' + finalHref + '"><i class="bi bi-clipboard me-1"></i>??</button><a class="btn btn-sm btn-outline-secondary btn-open" href="' + finalHref + '" target="_blank"><i class="bi bi-box-arrow-up-right me-1"></i>??</a>' + playBtn + '</div></div>';
+-        }).join('');
+-        Array.from(bodyEl.querySelectorAll('.btn-copy')).forEach(btn => {
+-          btn.addEventListener('click', function () {
+-            const v = this.getAttribute('data-href') || '';
+-            if (!v) return;
+-            const self = this;
+-            const oldText = self.textContent;
+-            function ok() {
+-              try {
+-                self.textContent = '???';
+-                self.disabled = true;
+-                setTimeout(() => { self.textContent = oldText; self.disabled = false; }, 1200);
+-              } catch (e) { }
+-            }
+-            function fallback() {
+-              try {
+-                const ta = document.createElement('textarea');
+-                ta.value = v;
+-                ta.style.position = 'fixed';
+-                ta.style.top = '-1000px';
+-                document.body.appendChild(ta);
+-                ta.focus();
+-                ta.select();
+-                try { document.execCommand('copy'); ok(); } catch (e) { }
+-                document.body.removeChild(ta);
+-              } catch (e) { }
+-            }
+-            try {
+-              if (navigator.clipboard && navigator.clipboard.writeText) {
+-                navigator.clipboard.writeText(v).then(ok).catch(fallback);
+-              } else {
+-                fallback();
+-              }
+-            } catch (e) {
+-              fallback();
+-            }
+-          });
+-        });
+-        Array.from(bodyEl.querySelectorAll('.btn-play')).forEach(btn => {
+-          btn.addEventListener('click', async function () {
+-            const href = this.getAttribute('data-href') || '';
+-            const typ = (this.getAttribute('data-type') || '').toUpperCase();
+-            if (!href) return;
+-            if (typ === 'JSON') {
+-              try {
+-                const r = await fetch(href);
+-                const j = await r.json();
+-                const list = Array.isArray(j.streams) ? j.streams : [];
+-                openApiPlayer(list);
+-              } catch (e) { }
+-            } else {
+-              window.open(href, '_blank');
+-            }
+-          });
+-        });
+-      }
+-      const initStatus = statusSel ? (statusSel.value || 'online') : 'online';
+-      renderLinks(initStatus);
+-      if (statusSel) statusSel.onchange = function () { renderLinks(this.value || 'online'); };
+-      if (scopeSel) scopeSel.onchange = function () { renderLinks(statusSel ? (statusSel.value || 'online') : 'online'); };
+-      if (protoSel) protoSel.onchange = function () { renderLinks(statusSel ? (statusSel.value || 'online') : 'online'); };
+-      if (fmtSel) fmtSel.onchange = function () { renderLinks(statusSel ? (statusSel.value || 'online') : 'online'); };
+-      modal.style.display = 'block';
+-      modal.querySelector('.modal').classList.add('show');
+-    }
+-    function openApiLinks() { showCenterLinks('???????'); }
+     function openApiPlayer(streamsList) {
+       let modal = document.getElementById('apiPlayerModalR');
+       if (!modal) {
+@@ -1865,176 +1628,7 @@
+       }));
+       await fetchStreams();
+     }
+-    async function persistSave() {
+-      const r = await fetch('/api/persist/save', { method: 'POST' });
+-      const j = await r.json();
+-      if (j.success) {
+-        await refreshVersions();
+-        try {
+-          const sel = document.getElementById('versionsSelect');
+-          const latest = sel && sel.options[0] ? sel.options[0].value : '';
+-          showCenterConfirm(latest ? ('?????streams.json ? ' + latest) : '?????streams.json');
+-        } catch (e) { }
+-      }
+-    }
+-    async function autoloadPersistedLatest() {
+-      try {
+-        const r = await fetch('/api/persist/list');
+-        const j = await r.json();
+-        if (j.success && Array.isArray(j.versions) && j.versions.length > 0) {
+-          const latest = j.versions[0] && j.versions[0].file ? j.versions[0].file : '';
+-          if (latest) {
+-            const rv = await fetch('/api/persist/load-version', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: latest }) });
+-            const vj = await rv.json();
+-            if (vj.success) {
+-              if (vj.settings) {
+-                if (Array.isArray(vj.settings.groupTitles)) { const merged = mergeGroupTitlesPreserveMatchers(vj.settings.groupTitles); localStorage.setItem('groupTitles', JSON.stringify(merged)); }
+-                if (typeof vj.settings.logoTemplate === 'string') localStorage.setItem('logoTemplate', vj.settings.logoTemplate);
+-                if (Array.isArray(vj.settings.fccServers)) localStorage.setItem('fccServers', JSON.stringify(vj.settings.fccServers));
+-                renderFccSelect();
+-              }
+-              if (Array.isArray(vj.streams)) {
+-                streams = vj.streams;
+-                renderTable();
+-              }
+-              return true;
+-            }
+-          }
+-        }
+-      } catch (e) { }
+-      try {
+-        const rp = await fetch('/api/persist/load', { method: 'POST' });
+-        const pj = await rp.json();
+-        if (pj.success) { await fetchStreams(); return true; }
+-      } catch (e) { }
+-      return false;
+-    }
+-    async function persistLoad() {
+-      const r = await fetch('/api/persist/load', { method: 'POST' });
+-      const j = await r.json();
+-      if (j.success) {
+-        try {
+-          const rs = await fetch('/api/settings');
+-          const sj = await rs.json();
+-          if (sj.success && sj.settings) {
+-            appSettings = sj.settings;
+-            if (Array.isArray(appSettings.groupTitles)) { const merged = mergeGroupTitlesPreserveMatchers(appSettings.groupTitles); localStorage.setItem('groupTitles', JSON.stringify(merged)); }
+-            if (typeof appSettings.logoTemplate === 'string') localStorage.setItem('logoTemplate', appSettings.logoTemplate);
+-            if (Array.isArray(appSettings.fccServers)) localStorage.setItem('fccServers', JSON.stringify(appSettings.fccServers));
+-            if (Array.isArray(appSettings.proxyList)) localStorage.setItem('proxyList', JSON.stringify(appSettings.proxyList));
+-            if (typeof appSettings.externalUrl === 'string') localStorage.setItem('externalUrl', appSettings.externalUrl);
+-          }
+-        } catch (e) { }
+-        try {
+-          const rf = await fetch('/api/config/fcc-servers');
+-          const jf = await rf.json();
+-          if (jf.success && Array.isArray(jf.servers) && jf.servers.length > 0) {
+-            localStorage.setItem('fccServers', JSON.stringify(jf.servers));
+-            if (jf.currentId) localStorage.setItem('currentFccId', jf.currentId);
+-            renderFccSelect();
+-          }
+-        } catch (e) { }
+-        await loadLogoTemplates();
+-        await loadGroupTitles();
+-        await loadUdpxyServers();
+-        await refreshVersions();
+-        await fetchStreams();
+-        try {
+-          const cnt = Array.isArray(j.streams) ? j.streams.length : 0;
+-          showCenterConfirm('?????streams.json?? ' + cnt + ' ??');
+-        } catch (e) { }
+-      }
+-    }
+-    async function persistDelete() {
+-      try {
+-        const r = await fetch('/api/persist/delete', { method: 'POST' });
+-        const j = await r.json();
+-        if (j && j.success) {
+-          await refreshVersions();
+-          showCenterConfirm('????streams.json');
+-        }
+-      } catch (e) { }
+-    }
+-    function getCurrentVersionFile() { try { return localStorage.getItem('currentVersionFile') || ''; } catch (e) { return ''; } }
+-    function setCurrentVersionFile(f) { try { localStorage.setItem('currentVersionFile', f || ''); } catch (e) { } }
+-    async function refreshVersions(selectedFile, quiet) {
+-      try {
+-        const r = await fetch('/api/persist/list');
+-        const j = await r.json();
+-        const sel = document.getElementById('versionsSelect');
+-        if (!sel) return;
+-        sel.innerHTML = '';
+-        const placeholder = document.createElement('option');
+-        placeholder.value = '';
+-        placeholder.text = '?????';
+-        sel.appendChild(placeholder);
+-        sel.value = '';
+-        if (j.success && Array.isArray(j.versions) && j.versions.length > 0) {
+-          j.versions.forEach(v => { const opt = document.createElement('option'); opt.value = v.file; opt.text = v.file; sel.appendChild(opt); });
+-          if (selectedFile) {
+-            const has = j.versions.find(v => v.file === selectedFile);
+-            sel.value = has ? selectedFile : '';
+-          }
+-          if (!quiet) { showCenterConfirm('?????? ' + j.versions.length + ' ???'); }
+-        } else {
+-          if (!quiet) { showCenterConfirm('?????????'); }
+-        }
+-      } catch (e) { }
+-    }
+-    async function loadSelectedVersion() {
+-      const sel = document.getElementById('versionsSelect');
+-      if (!sel.value) { showCenterConfirm('??????????'); return; }
+-      const filename = sel.value;
+-      const r = await fetch('/api/persist/load-version', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename }) });
+-      const j = await r.json();
+-      if (j.success) {
+-        setCurrentVersionFile(filename);
+-        await refreshVersions(filename, true);
+-        await fetchStreams();
+-        if (j.settings) {
+-          if (Array.isArray(j.settings.groupTitles)) { const merged = mergeGroupTitlesPreserveMatchers(j.settings.groupTitles); localStorage.setItem('groupTitles', JSON.stringify(merged)); }
+-          if (typeof j.settings.logoTemplate === 'string') localStorage.setItem('logoTemplate', j.settings.logoTemplate);
+-          if (Array.isArray(j.settings.fccServers)) localStorage.setItem('fccServers', JSON.stringify(j.settings.fccServers));
+-          renderFccSelect();
+-        }
+-        try {
+-          const total = Array.isArray(streams) ? streams.length : 0;
+-          const online = Array.isArray(streams) ? streams.filter(s => s.isAvailable).length : 0;
+-          const offline = total - online;
+-          showCenterConfirm('??????' + filename + '?? ' + total + '??? ' + online + '??? ' + offline + '?');
+-        } catch (e) { }
+-      }
+-    }
+-    async function deleteSelectedVersion() {
+-      const sel = document.getElementById('versionsSelect');
+-      const filename = sel && sel.value ? sel.value : '';
+-      if (!filename) { showCenterConfirm('??????????'); return; }
+-      const r = await fetch('/api/persist/delete-version', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename }) });
+-      const j = await r.json();
+-      if (j && j.success) {
+-        if (getCurrentVersionFile() === filename) setCurrentVersionFile('');
+-        await refreshVersions('', true);
+-        showCenterConfirm('??????' + filename);
+-      } else {
+-        showCenterConfirm('?????' + (j && j.message ? j.message : '????'));
+-      }
+-    }
+-    async function doPageRefresh() {
+-      const curr = getCurrentVersionFile();
+-      let verCount = 0;
+-      try {
+-        const r = await fetch('/api/persist/list');
+-        const j = await r.json();
+-        if (j.success && Array.isArray(j.versions)) verCount = j.versions.length;
+-      } catch (e) { }
+-      await refreshVersions(curr, true);
+-      await fetchStreams();
+-      const total = Array.isArray(streams) ? streams.length : 0;
+-      const online = Array.isArray(streams) ? streams.filter(s => s.isAvailable).length : 0;
+-      const offline = total - online;
+-      const currLabel = curr && curr.length ? curr : 'streams.json';
+-      showCenterConfirm('????????? ' + currLabel + '??? ' + verCount + ' ???????? ' + total + '??? ' + online + '??? ' + offline + '?');
+-    }
++
+     function qualityLabel(resolution) {
+       const r = (resolution || '').toLowerCase();
+       if (r === '720x576' || r === '1280x720') return '??';
+@@ -3038,20 +2632,10 @@
+         if (logoTplInputEl) logoTplInputEl.value = getLogoTemplate();
+         const syncFccBtn = document.getElementById('syncFccBtn');
+         if (syncFccBtn) syncFccBtn.onclick = syncFcc;
+-        const saveBtn = document.getElementById('saveBtn');
+-        if (saveBtn) saveBtn.onclick = persistSave;
+-        const loadBtn = document.getElementById('loadBtn');
+-        if (loadBtn) loadBtn.onclick = loadSelectedVersion;
+-        const delBtn = document.getElementById('deletePersistBtn');
+-        if (delBtn) delBtn.onclick = deleteSelectedVersion;
+-        const refreshVersionsBtn = document.getElementById('refreshVersionsBtn');
+-        if (refreshVersionsBtn) refreshVersionsBtn.onclick = doPageRefresh;
+         const appSettingsBtn = document.getElementById('appSettingsBtn');
+         if (appSettingsBtn) appSettingsBtn.onclick = openAppSettingsModal;
+         const searchInput = document.getElementById('searchInputResults');
+         if (searchInput) searchInput.oninput = function () { searchQuery = this.value || ''; resCurrentPage = 1; renderTable(); };
+-        const loadVersionBtn = document.getElementById('loadVersionBtn');
+-        if (loadVersionBtn) loadVersionBtn.onclick = loadSelectedVersion;
+         const renameGroupBtn = document.getElementById('renameGroupBtn');
+         if (renameGroupBtn) renameGroupBtn.onclick = async function () {
+           const from = (document.getElementById('renameFromInput').value || '').trim();
+@@ -3186,8 +2770,6 @@
+         renderFccSelect();
+         const toggleDebugBtn = document.getElementById('toggleDebugBtn');
+         if (toggleDebugBtn) toggleDebugBtn.onclick = function () { setDebugVisible(false); };
+-        const apiLinksBtn = document.getElementById('apiLinksBtn');
+-        if (apiLinksBtn) apiLinksBtn.onclick = openApiLinks;
+         const epgBtn = document.getElementById('epgBtn');
+         if (epgBtn) epgBtn.onclick = openEpgModal;
+         const fccBtn = document.getElementById('fccBtn');
+diff --git a/src/services/persistenceService.js b/src/services/persistenceService.js
+index 7e3e45d..578dd0f 100644
+--- a/src/services/persistenceService.js
++++ b/src/services/persistenceService.js
+@@ -46,50 +46,6 @@ class PersistenceService {
+         return this.writeLock;
+     }
+ 
+-    async saveWithBackup(filename, payload) {
+-        const _write = async () => {
+-            await this.ensureDataDir();
+-            const filePath = path.join(this.dataDir, filename);
+-            const tempPath = filePath + `.${Date.now()}.tmp`;
+-            try {
+-                const content = JSON.stringify(payload, null, 2);
+-                await fs.writeFile(tempPath, content, 'utf-8');
+-                await fs.rename(tempPath, filePath);
+-
+-                // Generate timestamped backup
+-                const ts = new Date();
+-                const pad = (n) => String(n).padStart(2, '0');
+-                const stamp = `${ts.getFullYear()}${pad(ts.getMonth() + 1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}`;
+-                const backupName = filename.replace('.json', '') + `-${stamp}.json`;
+-                const backupPath = path.join(this.dataDir, backupName);
+-
+-                await fs.writeFile(backupPath, content, 'utf-8');
+-                return true;
+-            } catch (e) {
+-                console.error(`[PersistenceService] Failed to save/backup ${filename}:`, e);
+-                try { await fs.unlink(tempPath); } catch (_) { }
+-                return false;
+-            }
+-        };
+-        this.writeLock = this.writeLock.then(_write).catch(() => false);
+-        return this.writeLock;
+-    }
+-
+-    async listBackups(pattern) {
+-        await this.ensureDataDir();
+-        try {
+-            const files = await fs.readdir(this.dataDir);
+-            const matches = files.filter(f => pattern.test(f));
+-            const entries = await Promise.all(matches.map(async f => {
+-                const full = path.join(this.dataDir, f);
+-                const stat = await fs.stat(full);
+-                return { file: f, time: stat.mtimeMs };
+-            }));
+-            return entries.sort((a, b) => b.time - a.time);
+-        } catch (e) {
+-            return [];
+-        }
+-    }
+ }
+ 
+ module.exports = new PersistenceService();
+diff --git a/src/services/streamService.js b/src/services/streamService.js
+index bccc178..1e8542f 100644
+--- a/src/services/streamService.js
++++ b/src/services/streamService.js
+@@ -32,10 +32,7 @@ class StreamService {
+         return await persistence.writeJson('streams.json', payload);
+     }
+ 
+-    async backupData() {
+-        const payload = { streams: this.multicastList, settings: this.settings };
+-        return await persistence.saveWithBackup('streams.json', payload);
+-    }
++
+ 
+     getStreams() {
+         return this.multicastList;

@@ -32,8 +32,23 @@ class StreamService {
         return await persistence.writeJson('streams.json', payload);
     }
 
+    async backupData() {
+        const payload = { streams: this.multicastList, settings: this.settings };
+        return await persistence.saveWithBackup('streams.json', payload);
+    }
 
-
+    async loadFromFile(filename) {
+        const data = await persistence.readJson(filename, { streams: null, settings: null });
+        if (data && data.streams) {
+            this.multicastList = Array.isArray(data.streams) ? data.streams : [];
+            if (data.settings) {
+                this.settings = { ...this.settings, ...data.settings };
+            }
+            await this.save(); // Overwrite the main file
+            return true;
+        }
+        return false;
+    }
     getStreams() {
         return this.multicastList;
     }
