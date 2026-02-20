@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 const persistence = require('../services/persistenceService');
 const streamService = require('../services/streamService');
-const authMiddleware = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 
 // 获取备份列表
-router.get('/list', authMiddleware, async (req, res) => {
+router.get('/list', requireAuth, async (req, res) => {
     try {
         const entries = await persistence.listBackups(/^streams-\d{14}\.json$/);
         const mapped = entries.map(e => ({
@@ -20,7 +20,7 @@ router.get('/list', authMiddleware, async (req, res) => {
 });
 
 // 手动保存快照
-router.post('/save', authMiddleware, async (req, res) => {
+router.post('/save', requireAuth, async (req, res) => {
     try {
         const ok = await streamService.backupData();
         if (ok) {
@@ -35,7 +35,7 @@ router.post('/save', authMiddleware, async (req, res) => {
 });
 
 // 加载流数据（触发前端重新拉取）
-router.post('/load', authMiddleware, async (req, res) => {
+router.post('/load', requireAuth, async (req, res) => {
     try {
         await streamService.init(); // 重新加载内存
         const list = streamService.getStreams();
@@ -47,7 +47,7 @@ router.post('/load', authMiddleware, async (req, res) => {
 });
 
 // 恢复历史版本
-router.post('/load-version', authMiddleware, async (req, res) => {
+router.post('/load-version', requireAuth, async (req, res) => {
     try {
         const { filename } = req.body;
         if (!filename) return res.status(400).json({ success: false, message: '文件名称为空' });
@@ -66,7 +66,7 @@ router.post('/load-version', authMiddleware, async (req, res) => {
 });
 
 // 删除历史版本
-router.delete('/delete-version', authMiddleware, async (req, res) => {
+router.delete('/delete-version', requireAuth, async (req, res) => {
     try {
         const { filename } = req.body;
         if (!filename) return res.status(400).json({ success: false, message: '文件名称为空' });
