@@ -12,6 +12,10 @@
 [![GHCR](https://img.shields.io/badge/GHCR-iptv--checker-2ea44f?style=flat-square&logo=github)](https://github.com/cgg888/iptv-checker/pkgs/container/iptv-checker)
 </div>
 
+> [!NOTE]
+> **致敬源项目**：本项目 Fork 自 [CGG888/Iptv-Checker](https://github.com/CGG888/Iptv-Checker)。
+> 非常感谢原作者建立的优秀底层与构思。本仓库在此基础上，借助 AI 工具进行了一系列深度改造与性能升级（如彻底剥离前端冗余脚本、重写多并发架构、引入防注入级别的安全校验以及原子级写入等），以更契合我个人的极客使用习惯与高负载需求。
+
 ---
 
 ## 🚀 核心优势 (v1.3.0 高性能版)
