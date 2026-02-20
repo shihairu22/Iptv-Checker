@@ -397,9 +397,12 @@ function updateStatsAndDisplay() {
     const online = filtered.filter(s => s.isAvailable);
     const offline = filtered.filter(s => !s.isAvailable);
 
-    document.getElementById('stat-total').innerText = filtered.length;
-    document.getElementById('stat-online').innerText = online.length;
-    document.getElementById('stat-offline').innerText = offline.length;
+    const st = document.getElementById('stat-total');
+    if (st) st.innerText = filtered.length;
+    const so = document.getElementById('stat-online');
+    if (so) so.innerText = online.length;
+    const soff = document.getElementById('stat-offline');
+    if (soff) soff.innerText = offline.length;
 
     // 分页处理
     const total = filtered.length;
@@ -461,7 +464,8 @@ function renderStreamsList(arr) {
 </div>
 `).join('');
 
-    document.getElementById('streams-list').innerHTML = render(arr);
+    const sl = document.getElementById('streams-list');
+    if (sl) sl.innerHTML = render(arr);
     bindListEvents(); // 重新绑定列表内的事件（如checkbox）
 }
 
@@ -690,9 +694,12 @@ function updateInputCount() {
     } else if (batchInput) {
         count = batchInput.split('\n').map(line => line.trim()).filter(line => line && !line.startsWith('#')).length;
     }
-    document.getElementById('stat-total').innerText = count;
-    document.getElementById('stat-online').innerText = 0;
-    document.getElementById('stat-offline').innerText = 0;
+    const statTotal = document.getElementById('stat-total');
+    if (statTotal) statTotal.innerText = count;
+    const statOnline = document.getElementById('stat-online');
+    if (statOnline) statOnline.innerText = 0;
+    const statOffline = document.getElementById('stat-offline');
+    if (statOffline) statOffline.innerText = 0;
 }
 
 function updateRangeSummary() {
@@ -858,11 +865,14 @@ function bindUIEvents() {
 
     if (select) select.onchange = function () { setCurrentUdpxyId(this.value); renderUdpxySelect(); };
     if (addBtn) addBtn.onclick = function () {
-        const name = document.getElementById('udpxyNameInput').value;
-        const url = document.getElementById('udpxyAddInput').value;
+        const nameInput = document.getElementById('udpxyNameInput');
+        const urlInput = document.getElementById('udpxyAddInput');
+        if (!nameInput || !urlInput) return;
+        const name = nameInput.value;
+        const url = urlInput.value;
         addUdpxy(name, url);
-        document.getElementById('udpxyNameInput').value = '';
-        document.getElementById('udpxyAddInput').value = '';
+        nameInput.value = '';
+        urlInput.value = '';
     };
     if (delBtn) delBtn.onclick = function () {
         showCenterConfirm('确定删除当前选中服务器？', function (ok) { if (ok) deleteCurrentUdpxy(); });
@@ -883,11 +893,15 @@ function bindUIEvents() {
     });
 
     if (applyCidrBtn) applyCidrBtn.addEventListener('click', function () {
-        const cidr = document.getElementById('cidrInput').value.trim();
+        const cidrEl = document.getElementById('cidrInput');
+        if (!cidrEl) return;
+        const cidr = cidrEl.value.trim();
         const rng = parseCIDR(cidr);
         if (rng) {
-            document.getElementById('rangeStart').value = rng.start;
-            document.getElementById('rangeEnd').value = rng.end;
+            const startE = document.getElementById('rangeStart');
+            if (startE) startE.value = rng.start;
+            const endE = document.getElementById('rangeEnd');
+            if (endE) endE.value = rng.end;
             updateRangeSummary();
             showCenterConfirm('CIDR已转换为IP范围', null, true);
         } else {
