@@ -801,47 +801,53 @@ function bindUIEvents() {
     if (loadBtn) loadBtn.onclick = loadFromNetwork;
 
     // 开始检测
-    document.getElementById('startDetectBtn').addEventListener('click', async () => {
-        if (detectRunning) return;
-        detectRunning = true;
-        const startBtn = document.getElementById('startDetectBtn');
-        const stopBtn = document.getElementById('stopDetectBtn');
-        if (startBtn) startBtn.disabled = true;
+    const startDetectBtn = document.getElementById('startDetectBtn');
+    if (startDetectBtn) {
+        startDetectBtn.addEventListener('click', async () => {
+            if (detectRunning) return;
+            detectRunning = true;
+            const startBtn = document.getElementById('startDetectBtn');
+            const stopBtn = document.getElementById('stopDetectBtn');
+            if (startBtn) startBtn.disabled = true;
 
-        const udpxyUrl = document.getElementById('udpxyUrl').value;
-        const batchText = document.getElementById('batchInput').value;
-        const startUrl = document.getElementById('rangeStart').value.trim();
-        const endUrl = document.getElementById('rangeEnd').value.trim();
+            const udpxyUrl = document.getElementById('udpxyUrl').value;
+            const batchText = document.getElementById('batchInput').value;
+            const startUrl = document.getElementById('rangeStart').value.trim();
+            const endUrl = document.getElementById('rangeEnd').value.trim();
 
-        if (!udpxyUrl) {
-            showCenterConfirm('请先填写UDPXY服务器地址', null, true);
-            detectRunning = false;
-            if (startBtn) startBtn.disabled = false;
-            return;
-        }
-
-        try {
-            clearScanTask();
-            if (batchText.trim()) {
-                await batchCheckStreams(udpxyUrl, batchText);
-            } else if (startUrl && endUrl) {
-                await rangeCheckStreams(udpxyUrl, startUrl, endUrl);
-            } else {
-                showCenterConfirm('请粘贴组播地址或填写范围再点击检测', null, true);
+            if (!udpxyUrl) {
+                showCenterConfirm('请先填写UDPXY服务器地址', null, true);
+                detectRunning = false;
+                if (startBtn) startBtn.disabled = false;
+                return;
             }
-        } finally {
-            detectRunning = false;
-            if (startBtn) startBtn.disabled = false;
-        }
-    });
+
+            try {
+                clearScanTask();
+                if (batchText.trim()) {
+                    await batchCheckStreams(udpxyUrl, batchText);
+                } else if (startUrl && endUrl) {
+                    await rangeCheckStreams(udpxyUrl, startUrl, endUrl);
+                } else {
+                    showCenterConfirm('请粘贴组播地址或填写范围再点击检测', null, true);
+                }
+            } finally {
+                detectRunning = false;
+                if (startBtn) startBtn.disabled = false;
+            }
+        });
+    }
 
     // 停止检测
-    document.getElementById('stopDetectBtn').addEventListener('click', async function () {
-        try {
-            await fetch('/api/task/stop', { method: 'POST' });
-            showProgress(0, 0, '正在停止任务...');
-        } catch (e) { }
-    });
+    const stopDetectBtn = document.getElementById('stopDetectBtn');
+    if (stopDetectBtn) {
+        stopDetectBtn.addEventListener('click', async function () {
+            try {
+                await fetch('/api/task/stop', { method: 'POST' });
+                showProgress(0, 0, '正在停止任务...');
+            } catch (e) { }
+        });
+    }
 
     // UDPXY 设置绑定
     loadUdpxyServersBackend().then(() => { renderUdpxySelect(); });
