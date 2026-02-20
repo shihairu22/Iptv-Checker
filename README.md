@@ -6,10 +6,10 @@
 
 ![Iptv-Checker 检测空数据界面](./public/preview-empty.png)
 
-[![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/cgg888/iptv-checker?style=flat-square&color=blue)](https://github.com/cgg888/iptv-checker/releases)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/cgg888/iptv-checker/docker-image.yml?branch=main&style=flat-square)](https://github.com/cgg888/iptv-checker/actions)
-[![GitHub Downloads](https://img.shields.io/github/downloads/cgg888/iptv-checker/total?style=flat-square&color=success)](https://github.com/cgg888/iptv-checker/releases)
-[![GHCR](https://img.shields.io/badge/GHCR-iptv--checker-2ea44f?style=flat-square&logo=github)](https://github.com/cgg888/iptv-checker/pkgs/container/iptv-checker)
+[![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/shihairu22/Iptv-Checker?style=flat-square&color=blue)](https://github.com/shihairu22/Iptv-Checker/releases)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/shihairu22/Iptv-Checker/docker-image.yml?branch=main&style=flat-square)](https://github.com/shihairu22/Iptv-Checker/actions)
+[![GitHub Downloads](https://img.shields.io/github/downloads/shihairu22/Iptv-Checker/total?style=flat-square&color=success)](https://github.com/shihairu22/Iptv-Checker/releases)
+[![GHCR](https://img.shields.io/badge/GHCR-iptv--checker-2ea44f?style=flat-square&logo=github)](https://github.com/shihairu22/Iptv-Checker/pkgs/container/iptv-checker)
 </div>
 
 > [!NOTE]
@@ -52,7 +52,7 @@
 ```yaml
 services:
   iptv-checker:
-    image: ghcr.io/cgg888/iptv-checker:latest
+    image: ghcr.io/shihairu22/iptv-checker:latest
     container_name: iptv-checker
     ports:
       - "8848:8848"
@@ -84,7 +84,7 @@ services:
 2. **克隆与安装**:
 
    ```bash
-   git clone https://github.com/cgg888/iptv-checker.git
+   git clone https://github.com/shihairu22/Iptv-Checker.git
    cd iptv-checker
    npm install
    ```
