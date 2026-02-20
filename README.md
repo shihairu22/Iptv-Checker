@@ -42,10 +42,10 @@
 
 ## 🐳 Docker 快速部署 (推荐)
 
-部署 IPTV Checker 最优雅的方式是使用 Docker。
+使用 Docker 可以快速部署 IPTV Checker。
 
 > [!IMPORTANT]
-> **高并发环境必读**: v1.3.0 优化了文件句柄管理，请务必在 Compose 文件中配置 `ulimits`，以防高并发扫描时触发系统的 `Too many open files` 限制。
+> **关于系统资源限制**: v1.3.0 版本调整了并发机制，建议在 Compose 文件中配置 `ulimits`，以增加文件句柄数限制，避免在检测大量链接时出现 `Too many open files` 错误。
 
 **`docker-compose.yml` 示例说明:**
 
@@ -60,8 +60,8 @@ services:
       - NODE_ENV=production
       - TZ=Asia/Shanghai
     volumes:
-      - ./data:/app/data   # [必须] 映射数据目录以持久化
-    ulimits:               # [关键] v1.3.0 性能基石，突破高并发文件句柄限制
+      - ./data:/app/data   # [必须] 映射数据目录以持久化数据
+    ulimits:               # [建议] 增加文件句柄限制以支持高并发运行
       nofile:
         soft: 65535
         hard: 65535
