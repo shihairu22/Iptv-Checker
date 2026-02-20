@@ -33,7 +33,10 @@ router.post('/check-stream', (req, res) => {
     let { udpxyUrl, multicastUrl, name } = req.body;
     udpxyUrl = String(udpxyUrl || '').trim();
     multicastUrl = String(multicastUrl || '').trim();
-    const fullUrl = `${udpxyUrl}/rtp/${multicastUrl.replace('rtp://', '')}`;
+    let fullUrl = multicastUrl;
+    if (fullUrl.startsWith('rtp://') && udpxyUrl) {
+        fullUrl = `${udpxyUrl}/rtp/${fullUrl.replace('rtp://', '')}`;
+    }
 
     ffprobeCheck(fullUrl, (data) => {
         const list = streamService.getStreams();

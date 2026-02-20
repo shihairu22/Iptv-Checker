@@ -4,6 +4,7 @@ const path = require('path');
 class PersistenceService {
     constructor() {
         this.dataDir = path.join(__dirname, '../../data');
+        this.writeLock = Promise.resolve();
     }
 
     async ensureDataDir() {
@@ -26,38 +27,52 @@ class PersistenceService {
     }
 
     async writeJson(filename, obj) {
-        await this.ensureDataDir();
-        const filePath = path.join(this.dataDir, filename);
-        try {
-            const content = JSON.stringify(obj, null, 2);
-            await fs.writeFile(filePath, content, 'utf-8');
-            return true;
-        } catch (e) {
-            console.error(`[PersistenceService] Failed to write ${filename}:`, e);
-            return false;
-        }
+        const _write = async () => {
+            await this.ensureDataDir();
+            const filePath = path.join(this.dataDir, filename);
+            const tempPath = filePath + `.${Date.now()}.tmp`;
+            try {
+                const content = JSON.stringify(obj, null, 2);
+                await fs.writeFile(tempPath, content, 'utf-8');
+                await fs.rename(tempPath, filePath);
+                return true;
+            } catch (e) {
+                console.error(`[PersistenceService] Failed to write ${filename}:`, e);
+                try { await fs.unlink(tempPath); } catch (_) { }
+                return false;
+            }
+        };
+        this.writeLock = this.writeLock.then(_write).catch(() => false);
+        return this.writeLock;
     }
 
     async saveWithBackup(filename, payload) {
-        await this.ensureDataDir();
-        const filePath = path.join(this.dataDir, filename);
-        try {
-            const content = JSON.stringify(payload, null, 2);
-            await fs.writeFile(filePath, content, 'utf-8');
+        const _write = async () => {
+            await this.ensureDataDir();
+            const filePath = path.join(this.dataDir, filename);
+            const tempPath = filePath + `.${Date.now()}.tmp`;
+            try {
+                const content = JSON.stringify(payload, null, 2);
+                await fs.writeFile(tempPath, content, 'utf-8');
+                await fs.rename(tempPath, filePath);
 
-            // Generate timestamped backup
-            const ts = new Date();
-            const pad = (n) => String(n).padStart(2, '0');
-            const stamp = `${ts.getFullYear()}${pad(ts.getMonth() + 1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}`;
-            const backupName = filename.replace('.json', '') + `-${stamp}.json`;
-            const backupPath = path.join(this.dataDir, backupName);
-            
-            await fs.writeFile(backupPath, content, 'utf-8');
-            return true;
-        } catch (e) {
-            console.error(`[PersistenceService] Failed to save/backup ${filename}:`, e);
-            return false;
-        }
+                // Generate timestamped backup
+                const ts = new Date();
+                const pad = (n) => String(n).padStart(2, '0');
+                const stamp = `${ts.getFullYear()}${pad(ts.getMonth() + 1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}`;
+                const backupName = filename.replace('.json', '') + `-${stamp}.json`;
+                const backupPath = path.join(this.dataDir, backupName);
+
+                await fs.writeFile(backupPath, content, 'utf-8');
+                return true;
+            } catch (e) {
+                console.error(`[PersistenceService] Failed to save/backup ${filename}:`, e);
+                try { await fs.unlink(tempPath); } catch (_) { }
+                return false;
+            }
+        };
+        this.writeLock = this.writeLock.then(_write).catch(() => false);
+        return this.writeLock;
     }
 
     async listBackups(pattern) {

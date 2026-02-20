@@ -36,7 +36,8 @@ function checkNetwork(urlStr) {
                     return;
                 }
 
-                const socket = dgram.createSocket('udp4');
+                // 核心修复: 开启 reuseAddr，否则高并发检测相同组播端口 (如 :8000) 时会引发 EADDRINUSE 导致批量误判离线
+                const socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
                 let satisfied = false;
 
                 const timer = setTimeout(() => {

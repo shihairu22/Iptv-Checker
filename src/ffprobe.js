@@ -1,4 +1,4 @@
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 
 // 缓存检测结果
 const streamCache = new Map();
@@ -15,8 +15,18 @@ function ffprobeCheck(fullUrl, callback) {
     // 使用json格式输出，返回所有流（视频+音频）
     // 优化参数: -analyzeduration 10000000 (10s), -probesize 5000000 (5MB)
     // 适配高延迟: 增加 analyzeduration 到 10s，exec timeout 到 20s
-    const cmd = `ffprobe -v quiet -print_format json -show_streams -show_programs -show_format -analyzeduration 10000000 -probesize 5000000 "${fullUrl}"`;
-    exec(cmd, { timeout: 20000 }, (error, stdout, stderr) => {
+    // 安全排查: 改用 execFile 防止 URL 导致命令注入
+    const args = [
+        '-v', 'quiet',
+        '-print_format', 'json',
+        '-show_streams',
+        '-show_programs',
+        '-show_format',
+        '-analyzeduration', '10000000',
+        '-probesize', '5000000',
+        fullUrl
+    ];
+    execFile('ffprobe', args, { timeout: 20000 }, (error, stdout, stderr) => {
         let isAvailable = false;
         let frameRate = null;
         let bitRate = null;
