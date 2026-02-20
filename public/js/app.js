@@ -253,6 +253,19 @@ async function batchCheckStreams(udpxyUrl, batchText) {
 
 // 范围检测入口
 async function rangeCheckStreams(udpxyUrl, startUrl, endUrl) {
+    if (isTaskPaused) {
+        try {
+            const res = await fetch('/api/task/resume', { method: 'POST' });
+            const d = await res.json();
+            if (d.success) {
+                showProgress(0, 100, '任务已恢复...');
+            } else {
+                showCenterConfirm('恢复失败: ' + d.message, null, true);
+            }
+        } catch (e) { console.error(e); }
+        return;
+    }
+
     if (!udpxyUrl) { showCenterConfirm('请先选择UDPXY服务器', null, true); return; }
     if (!startUrl || !endUrl) { showCenterConfirm('请输入正确的范围（rtp://ip:port）', null, true); return; }
 

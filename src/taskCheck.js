@@ -95,11 +95,15 @@ class TaskManager extends EventEmitter {
                     this.queue.pause();
                     this.queue.clear();
                 }
-                this.queue = new PQueue({ concurrency: this.task.concurrency });
+                this.queue = new PQueue({ concurrency: this.task.concurrency, autoStart: true });
 
                 // 跳过已完成的
                 for (let i = this.task.finished; i < this.task.items.length; i++) {
                     this.queue.add(() => this.runItem(this.task.items[i]));
+                }
+
+                if (typeof this.queue.start === 'function') {
+                    this.queue.start();
                 }
             } else {
                 this.log('服务重启，任务处于暂停状态');
@@ -273,11 +277,16 @@ class TaskManager extends EventEmitter {
             this.queue.pause();
             this.queue.clear();
         }
-        this.queue = new PQueue({ concurrency: this.task.concurrency });
+        this.queue = new PQueue({ concurrency: this.task.concurrency, autoStart: true });
 
         // 只添加未完成的任务
         for (let i = this.task.finished; i < this.task.items.length; i++) {
             this.queue.add(() => this.runItem(this.task.items[i]));
+        }
+
+        // 显式唤醒新队列，防止因版本差异造成的假死
+        if (typeof this.queue.start === 'function') {
+            this.queue.start();
         }
 
         this.saveState();

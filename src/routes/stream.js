@@ -28,6 +28,11 @@ router.post('/task/stop', (req, res) => {
     res.json({ success: true });
 });
 
+// 恢复任务
+router.post('/task/resume', (req, res) => {
+    res.json({ success: taskManager.resume() });
+});
+
 // 单条检测
 router.post('/check-stream', (req, res) => {
     let { udpxyUrl, multicastUrl, name } = req.body;
