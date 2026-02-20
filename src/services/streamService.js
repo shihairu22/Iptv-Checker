@@ -32,10 +32,7 @@ class StreamService {
         return await persistence.writeJson('streams.json', payload);
     }
 
-    async backupData() {
-        const payload = { streams: this.multicastList, settings: this.settings };
-        return await persistence.saveWithBackup('streams.json', payload);
-    }
+
 
     getStreams() {
         return this.multicastList;
