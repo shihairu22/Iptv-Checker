@@ -14,9 +14,6 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    env:
-      ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
-      ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - name: Resolve tag name
@@ -93,36 +90,3 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Login to Aliyun Registry
-        if: ${{ env.ACR_USERNAME != '' && env.ACR_PASSWORD != '' }}
-        uses: docker/login-action@v3
-        with:
-          registry: registry.cn-hongkong.aliyuncs.com
-          username: ${{ env.ACR_USERNAME }}
-          password: ${{ env.ACR_PASSWORD }}
-      - name: Push tags to Aliyun
-        if: ${{ env.ACR_USERNAME != '' && env.ACR_PASSWORD != '' }}
-        run: |
-          TAG="${{ steps.vars.outputs.tag }}"
-          REPO="$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')"
-          # 假设 Aliyun 上也使用相同的 owner/repo 结构，或者需要提取 repo name
-          # 这里保留原作者的 naming convention 但尝试动态化
-          # 原始逻辑是 OWNER_LC/iptv-checker
-          # 如果我们用 REPO (owner/repo)，则需要在 Aliyun 上有对应 namespace
-          
-          IMAGE_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
-          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          
-          STRIP=${TAG#v}
-          SRC1=ghcr.io/$REPO:$TAG
-          SRC2=ghcr.io/$REPO:$STRIP
-          
-          # Aliyun Target: registry.cn-hongkong.aliyuncs.com/OWNER/IMAGE
-          DST1=registry.cn-hongkong.aliyuncs.com/$OWNER_LC/$IMAGE_NAME:$TAG
-          DST2=registry.cn-hongkong.aliyuncs.com/$OWNER_LC/$IMAGE_NAME:$STRIP
-          docker pull $SRC1
-          docker tag $SRC1 $DST1
-          docker push $DST1
-          docker pull $SRC2
-          docker tag $SRC2 $DST2
-          docker push $DST2

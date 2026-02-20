@@ -10,8 +10,6 @@
 [![Build Status](https://img.shields.io/github/actions/workflow/status/cgg888/iptv-checker/docker-image.yml?branch=main&style=flat-square)](https://github.com/cgg888/iptv-checker/actions)
 [![GitHub Downloads](https://img.shields.io/github/downloads/cgg888/iptv-checker/total?style=flat-square&color=success)](https://github.com/cgg888/iptv-checker/releases)
 [![GHCR](https://img.shields.io/badge/GHCR-iptv--checker-2ea44f?style=flat-square&logo=github)](https://github.com/cgg888/iptv-checker/pkgs/container/iptv-checker)
-[![Aliyun Registry](https://img.shields.io/badge/Aliyun%20Registry-iptv--checker-ff6a00?style=flat-square&logo=alibabacloud)](https://cr.console.aliyun.com)
-
 </div>
 
 ---
@@ -50,7 +48,7 @@
 ```yaml
 services:
   iptv-checker:
-    image: ghcr.io/cgg888/iptv-checker:latest  # 国内服务器可换 registry.cn-hongkong.aliyuncs.com/cgg888/iptv-checker:latest
+    image: ghcr.io/cgg888/iptv-checker:latest
     container_name: iptv-checker
     ports:
       - "8848:8848"
