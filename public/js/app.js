@@ -622,6 +622,55 @@ function renderUdpxySelect() {
 // 断点续扫相关
 function clearScanTask() { try { localStorage.removeItem('scanTask'); } catch (e) { } }
 
+// 数据导出
+function exportData(format) {
+    if (!allStreams || allStreams.length === 0) {
+        showCenterConfirm('当前没有可导出的数据', null, true);
+        return;
+    }
+
+    let exportList = allStreams;
+    if (filterStatus === 'online') exportList = allStreams.filter(s => s.isAvailable);
+    if (filterStatus === 'offline') exportList = allStreams.filter(s => !s.isAvailable);
+
+    let content = '';
+    const dateStr = new Date().toISOString().replace(/T/, '_').replace(/:/g, '').split('.')[0];
+    const filename = `streams_${filterStatus}_${dateStr}.${format}`;
+
+    if (format === 'm3u') {
+        content = '#EXTM3U\n';
+        exportList.forEach(s => {
+            content += `#EXTINF:-1 tvg-name="${s.name}" tvg-logo="${s.logo || ''}" group-title="${s.groupTitle || '默认'}",${s.name}\n`;
+            let url = s.multicastUrl;
+            // if (s.udpxyUrl) url = `${s.udpxyUrl}/rtp/${url.replace('rtp://', '')}`;
+            content += `${url}\n`;
+        });
+    } else if (format === 'txt') {
+        // 先按 groupTitle 排序以便合并输出
+        exportList.sort((a, b) => (a.groupTitle || '默认').localeCompare(b.groupTitle || '默认'));
+        let currentGroup = '';
+        exportList.forEach(s => {
+            const group = s.groupTitle || '默认';
+            if (group !== currentGroup) {
+                content += `${group},#genre#\n`;
+                currentGroup = group;
+            }
+            let url = s.multicastUrl;
+            // if (s.udpxyUrl) url = `${s.udpxyUrl}/rtp/${url.replace('rtp://', '')}`;
+            content += `${s.name},${url}\n`;
+        });
+    }
+
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+}
+
 // 辅助功能
 function updateInputCount() {
     let rangeStart = document.getElementById('rangeStart') ? (document.getElementById('rangeStart').value || '').trim() : '';

@@ -309,6 +309,19 @@
                     </div>
 
                     <div class="btn-group">
+                        <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown"
+                            aria-expanded="false">
+                            <i class="bi bi-download me-1"></i>导出
+                        </button>
+                        <ul class="dropdown-menu shadow">
+                            <li><button class="dropdown-item" onclick="exportData('txt');return false;"><i
+                                        class="bi bi-file-text me-2"></i>导出 TXT</button></li>
+                            <li><button class="dropdown-item" onclick="exportData('m3u');return false;"><i
+                                        class="bi bi-file-earmark-play me-2"></i>导出 M3U</button></li>
+                        </ul>
+                    </div>
+
+                    <div class="btn-group">
                         <button class="btn btn-outline-danger" id="batchDeleteBtn"><i
                                 class="bi bi-trash me-1"></i>删除</button>
                         <button class="btn btn-outline-secondary" id="clearAllBtn"><i
