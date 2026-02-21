@@ -568,10 +568,8 @@
       tbody.innerHTML = '';
       const arr = Array.isArray(streamsList) ? streamsList : [];
       arr.slice(0, 50).forEach((s, i) => {
-        const name = s && (s.name || s.tvgName) ? (s.name || s.tvgName) : ('频道' + (i + 1));
-        const url = s && s.httpUrl ? s.httpUrl : '';
-        const tr = document.createElement('tr');
-        tr.innerHTML = '<td>' + name + '</td><td><button class="btn btn-outline-primary btn-sm" id="apiPlayBtn-' + i + '">播放</button></td>';
+        const nameEsc = escapeHTML(name || '');
+        tr.innerHTML = '<td>' + nameEsc + '</td><td><button class="btn btn-outline-primary btn-sm" id="apiPlayBtn-' + i + '">播放</button></td>';
         tbody.appendChild(tr);
         const btn = document.getElementById('apiPlayBtn-' + i);
         if (btn) btn.onclick = function () { if (video && url) { video.src = url; video.play().catch(() => { }); } };
@@ -860,8 +858,8 @@
         tbody.innerHTML = '';
         rs.forEach((r, i) => {
           const id = 'grm-' + i;
-          const tr = document.createElement('tr');
-          tr.innerHTML = '<td><select class="form-select form-select-sm" id="ruleField-' + id + '"><option value="name">名称</option><option value="tvgName">tvg-name</option><option value="tvgId">tvg-id</option><option value="addr">地址</option><option value="codec">编码</option><option value="resolution">分辨率</option><option value="groupTitle">分组</option></select></td><td><select class="form-select form-select-sm" id="ruleOp-' + id + '"><option value="contains">包含</option><option value="not_contains">不包含</option><option value="equals">等于</option><option value="prefix">前缀</option><option value="suffix">后缀</option><option value="regex">正则</option></select></td><td><input class="form-control form-control-sm" id="ruleVal-' + id + '" value="' + (r.value || '') + '"></td><td><button class="btn btn-outline-danger btn-sm" id="ruleDel-' + id + '">删除</button></td>';
+          const valEsc = escapeHTML(r.value || '');
+          tr.innerHTML = '<td><select class="form-select form-select-sm" id="ruleField-' + id + '"><option value="name">名称</option><option value="tvgName">tvg-name</option><option value="tvgId">tvg-id</option><option value="addr">地址</option><option value="codec">编码</option><option value="resolution">分辨率</option><option value="groupTitle">分组</option></select></td><td><select class="form-select form-select-sm" id="ruleOp-' + id + '"><option value="contains">包含</option><option value="not_contains">不包含</option><option value="equals">等于</option><option value="prefix">前缀</option><option value="suffix">后缀</option><option value="regex">正则</option></select></td><td><input class="form-control form-control-sm" id="ruleVal-' + id + '" value="' + valEsc + '"></td><td><button class="btn btn-outline-danger btn-sm" id="ruleDel-' + id + '">删除</button></td>';
           tbody.appendChild(tr);
           const f = document.getElementById('ruleField-' + id);
           const o = document.getElementById('ruleOp-' + id);
@@ -931,8 +929,9 @@
         const tbody = document.getElementById('logoTplTbodyR');
         tbody.innerHTML = '';
         list.forEach(item => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = '<td><input class="form-control form-control-sm" id="logoTplName-' + item.id + '" value="' + (item.name || '') + '"></td><td><input class="form-control form-control-sm" id="logoTplUrl-' + item.id + '" value="' + (item.url || '') + '"></td><td><select class="form-select form-select-sm" id="logoTplCat-' + item.id + '"><option value="内网台标">内网台标</option><option value="外网台标">外网台标</option></select></td><td><button class="btn btn-outline-danger btn-sm" id="logoTplDel-' + item.id + '">删除</button></td>';
+          const nameEsc = escapeHTML(item.name || '');
+          const urlEsc = escapeHTML(item.url || '');
+          tr.innerHTML = '<td><input class="form-control form-control-sm" id="logoTplName-' + item.id + '" value="' + nameEsc + '"></td><td><input class="form-control form-control-sm" id="logoTplUrl-' + item.id + '" value="' + urlEsc + '"></td><td><select class="form-select form-select-sm" id="logoTplCat-' + item.id + '"><option value="内网台标">内网台标</option><option value="外网台标">外网台标</option></select></td><td><button class="btn btn-outline-danger btn-sm" id="logoTplDel-' + item.id + '">删除</button></td>';
           tbody.appendChild(tr);
           const catSel = document.getElementById('logoTplCat-' + item.id);
           if (catSel) catSel.value = (item.category === '外网台标') ? '外网台标' : '内网台标';
@@ -979,8 +978,8 @@
         tbody.innerHTML = '';
         (Array.isArray(list) ? list : []).forEach(item => {
           const id = item && item.id ? item.id : uuid();
-          const tr = document.createElement('tr');
-          tr.innerHTML = '<td><select class="form-select form-select-sm" id="proxyType-' + id + '"><option value="组播代理">组播代理</option><option value="单播代理">单播代理</option></select></td><td><input class="form-control form-control-sm" id="proxyUrl-' + id + '" value="' + (item && item.url ? item.url : '') + '" placeholder="http(s)://域名或IP:端口"></td><td><button class="btn btn-outline-danger btn-sm" id="proxyDel-' + id + '">删除</button></td>';
+          const urlEsc = escapeHTML(item && item.url ? item.url : '');
+          tr.innerHTML = '<td><select class="form-select form-select-sm" id="proxyType-' + id + '"><option value="组播代理">组播代理</option><option value="单播代理">单播代理</option></select></td><td><input class="form-control form-control-sm" id="proxyUrl-' + id + '" value="' + urlEsc + '" placeholder="http(s)://域名或IP:端口"></td><td><button class="btn btn-outline-danger btn-sm" id="proxyDel-' + id + '">删除</button></td>';
           tbody.appendChild(tr);
           const typeSel = document.getElementById('proxyType-' + id);
           if (typeSel) typeSel.value = (item && item.type === '单播代理') ? '单播代理' : '组播代理';
@@ -1499,29 +1498,37 @@
         const tc = textColor(color);
         return 'background-color:' + color + ';color:' + tc + ';';
       }
-      const html = pageData.map(s => `
+      const html = pageData.map(s => {
+        const nameEsc = escapeHTML(s.name || '-');
+        const groupEsc = escapeHTML(s.groupTitle || '-');
+        const displayAddrEsc = escapeHTML(displayUrlBase(s) || '');
+        const httpParamMatch = (function () { const m = (s.httpParam || '').match(/fcc=([^&]+)/); return m ? m[1].split(':')[0] : '-'; })();
+        const httpParamEsc = escapeHTML(httpParamMatch || '-');
+
+        return `
     <tr>
       <td class="col-select ps-3"><input type="checkbox" class="form-check-input sel-res" data-index="${getStreamIndex(s)}" ${selectedRes.has(getStreamIndex(s)) ? 'checked' : ''}></td>
       <td class="col-status">${s.isAvailable ? '<span class="badge bg-success rounded-pill"><i class="bi bi-check-circle me-1"></i>在线</span>' : '<span class="badge bg-danger rounded-pill"><i class="bi bi-x-circle me-1"></i>离线</span>'}</td>
       <td class="col-type"><span class="badge bg-light text-dark border">${streamType(s)}</span></td>
-      <td class="col-name" title="${s.name || '-'}">${s.name || '-'}</td>
+      <td class="col-name" title="${nameEsc}">${nameEsc}</td>
       <td class="col-resolution">${s.resolution ? '<span class="badge bg-light text-dark border">' + s.resolution + '</span>' : '-'}</td>
       <td class="col-fps">${s.frameRate ? '<span class="badge bg-light text-dark border">' + s.frameRate + 'fps</span>' : '-'}</td>
       <td class="col-codec">${s.codec ? '<span class="badge bg-light text-dark border">' + s.codec + '</span>' : '-'}</td>
-      <td class="col-group"><span class="badge" style="${groupBadgeStyle(s.groupTitle || '-')}">${s.groupTitle || '-'}</span></td>
-      <td class="col-logo">${s.logo ? '<img src="' + s.logo + '" class="logo-img" onerror="if(!this.dataset.err){this.dataset.err=1;this.src=\'/api/proxy/stream?url=\'+encodeURIComponent(this.src);}">' : '<div class="logo-img d-flex align-items-center justify-content-center text-muted"><i class="bi bi-tv"></i></div>'}</td>
-      <td class="col-addr" title="${displayUrlBase(s)}">${displayUrlBase(s)}</td>
-      <td class="col-http" title="${s.httpParam || '-'}">${(function () { const m = (s.httpParam || '').match(/fcc=([^&]+)/); return m ? m[1].split(':')[0] : '-'; })()}</td>
+      <td class="col-group"><span class="badge" style="${groupBadgeStyle(s.groupTitle || '-')}">${groupEsc}</span></td>
+      <td class="col-logo">${s.logo ? '<img src="' + escapeHTML(s.logo) + '" class="logo-img" onerror="if(!this.dataset.err){this.dataset.err=1;this.src=\'/api/proxy/stream?url=\'+encodeURIComponent(this.src);}">' : '<div class="logo-img d-flex align-items-center justify-content-center text-muted"><i class="bi bi-tv"></i></div>'}</td>
+      <td class="col-addr" title="${displayAddrEsc}">${displayAddrEsc}</td>
+      <td class="col-http" title="${httpParamEsc}">${httpParamEsc}</td>
       <td class="col-ops pe-3">
         <div class="btn-group btn-group-sm">
             <button class="btn btn-outline-primary" onclick="openEditModal(${getStreamIndex(s)})" title="编辑"><i class="bi bi-pencil"></i></button>
-            <button class="btn btn-outline-success" onclick="openPotPlayer('${playUrlFor(s)}', '${(s.name || s.multicastUrl || '').replace(/'/g, '\\\'')}')" title="播放"><i class="bi bi-play-fill"></i></button>
+            <button class="btn btn-outline-success" onclick="openPotPlayer('${playUrlFor(s).replace(/'/g, "\\'")}', '${(s.name || s.multicastUrl || '').replace(/'/g, "\\'")}')" title="播放"><i class="bi bi-play-fill"></i></button>
             <button class="btn btn-outline-info" onclick="openEpgForIndex(${getStreamIndex(s)})" title="EPG/回看"><i class="bi bi-calendar-event"></i></button>
             <button class="btn btn-outline-danger" onclick="deleteStream(${getStreamIndex(s)})" title="删除"><i class="bi bi-trash"></i></button>
         </div>
       </td>
     </tr>
-  `).join('');
+  `;
+      }).join('');
       tbody.innerHTML = html;
       const info = document.getElementById('resPageInfo');
       if (info) info.textContent = (sizeVal >= total) ? `第 1/1 页（共 ${total} 条）` : `第 ${resCurrentPage}/${pages} 页（共 ${total} 条）`;
@@ -2984,98 +2991,6 @@
   </div>
 
   <script>
-    let isDockerEnv = false;
-
-    // 加载版本信息
-    async function loadSystemInfo() {
-      try {
-        const r = await fetch('/api/system/info');
-        const j = await r.json();
-        if (j.success) {
-          document.getElementById('footerVersion').textContent = 'v' + j.version;
-          document.getElementById('modalCurrentVersion').textContent = 'v' + j.version;
-          if (j.isDocker) {
-            isDockerEnv = true;
-            document.getElementById('dockerBadge').style.display = 'inline-block';
-          }
-        }
-      } catch (e) { }
-    }
-
-    // 显示弹窗并检查更新
-    async function showVersionModal() {
-      const modal = new bootstrap.Modal(document.getElementById('versionModal'));
-      modal.show();
-      await checkGithubUpdate();
-    }
-
-    async function checkGithubUpdate() {
-      const notesDiv = document.getElementById('releaseNotes');
-      const latestSpan = document.getElementById('modalLatestVersion');
-      const btnUpdate = document.getElementById('btnUpdate');
-
-      try {
-        const r = await fetch('https://api.github.com/repos/shihairu22/Iptv-Checker/releases/latest');
-        if (r.status === 200) {
-          const data = await r.json();
-          latestSpan.textContent = data.tag_name;
-          // 简单的 Markdown 转 HTML (增加 XSS 转义)
-          const safeBody = escapeHTML(data.body || '');
-          notesDiv.innerHTML = safeBody.replace(/\r\n/g, '<br>').replace(/\n/g, '<br>');
-
-          const currentVer = document.getElementById('modalCurrentVersion').textContent.replace('v', '').trim();
-          const remoteVer = data.tag_name.replace('v', '').trim();
-
-          if (remoteVer !== currentVer) {
-            btnUpdate.textContent = isDockerEnv ? 'Docker 更新指引' : '立即更新';
-            btnUpdate.disabled = false;
-            btnUpdate.classList.remove('btn-secondary');
-            btnUpdate.classList.add('btn-success');
-          } else {
-            btnUpdate.textContent = '已是最新版本';
-            btnUpdate.disabled = true;
-            btnUpdate.classList.remove('btn-success');
-            btnUpdate.classList.add('btn-secondary');
-          }
-        } else {
-          latestSpan.textContent = '获取失败';
-          notesDiv.textContent = '无法连接到 GitHub API';
-        }
-      } catch (e) {
-        latestSpan.textContent = '网络错误';
-        notesDiv.textContent = '检查更新失败';
-      }
-    }
-
-    async function doUpdate() {
-      if (isDockerEnv) {
-        alert('Docker 环境无法直接通过网页更新。\n\n请在服务器执行以下命令更新：\ndocker-compose pull && docker-compose up -d');
-        return;
-      }
-
-      if (!confirm('确定要尝试自动更新吗？\n请确保已保存数据。')) return;
-
-      const btn = document.getElementById('btnUpdate');
-      btn.disabled = true;
-      btn.textContent = '更新中...';
-
-      try {
-        const r = await fetch('/api/system/update', { method: 'POST' });
-        const j = await r.json();
-        alert(j.message);
-        if (j.success) {
-          location.reload();
-        }
-      } catch (e) {
-        alert('请求失败');
-      } finally {
-        btn.disabled = false;
-        btn.textContent = '立即更新';
-      }
-    }
-
-    document.addEventListener('DOMContentLoaded', loadSystemInfo);
-
     async function doLogout() {
       await fetch('/api/logout', { method: 'POST' });
       window.location.href = '/login.html';

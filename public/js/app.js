@@ -13,6 +13,7 @@ let selectedSet = new Set();
 let pageSize = 20;
 let currentPage = 1;
 let filterStatus = 'online'; // all/online/offline
+let isDockerEnv = false; // 全局 Docker 环境标识
 
 // 图表实例
 let statusChartInstance = null;
@@ -629,7 +630,11 @@ function renderUdpxySelect() {
     if (!select) return;
     const list = getUdpxyServers();
     const curr = getCurrentUdpxyId() || (list[0] && list[0].id);
-    select.innerHTML = list.map(s => `<option value="${s.id}">${s.name} (${s.url})</option>`).join('');
+    select.innerHTML = list.map(s => {
+        const nameEsc = escapeHTML(s.name || '');
+        const urlEsc = escapeHTML(s.url || '');
+        return `<option value="${escapeHTML(s.id)}">${nameEsc} (${urlEsc})</option>`;
+    }).join('');
     if (curr) select.value = curr;
     const url = getCurrentUdpxyUrl();
     if (input) input.value = url || '';
@@ -986,7 +991,13 @@ async function loadSystemInfo() {
         const j = await r.json();
         if (j.success) {
             document.getElementById('footerVersion').textContent = 'v' + j.version;
-            document.getElementById('modalCurrentVersion').textContent = 'v' + j.version;
+            const curVerEl = document.getElementById('modalCurrentVersion');
+            if (curVerEl) curVerEl.textContent = 'v' + j.version;
+            if (j.isDocker) {
+                isDockerEnv = true;
+                const badge = document.getElementById('dockerBadge');
+                if (badge) badge.style.display = 'inline-block';
+            }
         }
     } catch (e) { }
 }
@@ -1165,5 +1176,74 @@ async function doChangePwd() {
         }
     } catch (e) {
         showCenterConfirm('请求失败', null, true);
+    }
+}
+
+// --- 版本检测与更新逻辑 (全局通用) ---
+async function showVersionModal() {
+    const modalEl = document.getElementById('versionModal');
+    if (!modalEl) return;
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+    await checkGithubUpdate();
+}
+
+async function checkGithubUpdate() {
+    const notesDiv = document.getElementById('releaseNotes');
+    const latestSpan = document.getElementById('modalLatestVersion');
+    const btnUpdate = document.getElementById('btnUpdate');
+    if (!notesDiv || !latestSpan) return;
+
+    try {
+        const r = await fetch('https://api.github.com/repos/shihairu22/Iptv-Checker/releases/latest');
+        if (r.status === 200) {
+            const data = await r.json();
+            latestSpan.textContent = data.tag_name;
+            // 简单的 Markdown 转 HTML (增加 XSS 转义)
+            const safeBody = escapeHTML(data.body || '');
+            notesDiv.innerHTML = safeBody.replace(/\r\n/g, '<br>').replace(/\n/g, '<br>');
+
+            const verText = document.getElementById('modalCurrentVersion')?.textContent || '';
+            const currentVer = verText.replace('v', '').trim();
+            const remoteVer = data.tag_name.replace('v', '').trim();
+
+            if (remoteVer !== currentVer && btnUpdate) {
+                btnUpdate.textContent = isDockerEnv ? 'Docker 更新指引' : '立即更新';
+                btnUpdate.disabled = false;
+                btnUpdate.classList.remove('btn-secondary');
+                btnUpdate.classList.add('btn-success');
+            }
+        }
+    } catch (e) {
+        notesDiv.innerHTML = '<div class="text-center text-muted py-3">获取更新信息失败</div>';
+    }
+}
+
+async function doUpdate() {
+    if (isDockerEnv) {
+        alert('Docker 环境无法直接通过网页更新。\n\n请在服务器执行以下命令更新：\ndocker-compose pull && docker-compose up -d');
+        return;
+    }
+
+    if (!confirm('确定要尝试自动更新吗？\n请确保已保存数据。')) return;
+
+    const btn = document.getElementById('btnUpdate');
+    if (!btn) return;
+    const oldText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '更新中...';
+
+    try {
+        const r = await fetch('/api/system/update', { method: 'POST' });
+        const j = await r.json();
+        alert(j.message);
+        if (j.success) {
+            location.reload();
+        }
+    } catch (e) {
+        alert('请求失败');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = oldText;
     }
 }
