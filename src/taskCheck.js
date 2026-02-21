@@ -14,10 +14,20 @@ const LOG_SIZE = 50;
 let PQueue;
 (async () => {
     try {
-        const m = await import('p-queue');
+        // 设置超时，防止在某些环境下 PQueue 导入无限挂起
+        const importPromise = import('p-queue');
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('PQueue import timeout')), 10000));
+        const m = await Promise.race([importPromise, timeoutPromise]);
         PQueue = m.default;
     } catch (e) {
         console.error('Failed to import p-queue:', e);
+        // 提供一个极简的模拟，防止 init 循环死锁
+        PQueue = class MockQueue {
+            constructor() { this.concurrency = 1; }
+            add(fn) { fn(); return Promise.resolve(); }
+            pause() { }
+            clear() { }
+        };
     }
 })();
 
@@ -84,6 +94,15 @@ class TaskManager extends EventEmitter {
         if (state && (state.running || state.paused)) {
             this.task = { ...state, items: [] };
             this.regenerateItems();
+
+            // 关键修复：如果恢复后发现没有 items 但标记为正在运行，说明是由于之前的 Bug 导致的僵死任务，立即清理
+            if (this.task.total === 0 && (this.task.running || this.task.paused)) {
+                this.log('检测到无效的持久化扫描状态 (0 条目)，已自动重置。');
+                this.task.running = false;
+                this.task.paused = false;
+                this.saveState();
+                return;
+            }
 
             // 恢复进度
             if (this.task.running) {
@@ -159,12 +178,23 @@ class TaskManager extends EventEmitter {
         } else if (type === 'range') {
             const { udpxyUrl, startUrl, endUrl, ports: portStr } = params;
 
-            // 辅助函数：解析 IP 和端口
+            // 辅助函数：解析 IP 和端口 (增强灵活性)
             const parseRtp = (url) => {
-                const u = (url || '').trim();
-                const match = u.match(/rtp:\/\/([^:]+):(\d+)/);
+                let u = (url || '').trim();
+                // 移除常见的前缀和符号
+                u = u.replace(/^(rtp|udp):\/\/@?/, '').replace(/^@/, '');
+
+                // 匹配 IP:PORT 或是 单独的 IP
+                const match = u.match(/^([^:]+)(?::(\d+))?$/);
                 if (!match) return null;
-                return { host: match[1], port: parseInt(match[2], 10) };
+
+                let host = match[1];
+                let port = match[2] ? parseInt(match[2], 10) : 0;
+
+                // 验证是否为有效 IP 格式
+                if (!host.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) return null;
+
+                return { host, port };
             };
 
             const ipToInt = (ip) => {
@@ -230,6 +260,15 @@ class TaskManager extends EventEmitter {
         }
 
         this.task.total = this.task.items.length;
+        if (this.task.total === 0 && (type === 'batch' || type === 'range')) {
+            this.log(`警告：解析后扫描条目为 0。请检查输入是否包含有效的 IP 或 URL。参数预览: ${JSON.stringify(params)}`);
+            // 如果在运行中发现总数为 0，强制停止
+            if (this.task.running || this.task.paused) {
+                this.task.running = false;
+                this.task.paused = false;
+                this.saveState();
+            }
+        }
     }
 
     start(params) {
@@ -245,6 +284,13 @@ class TaskManager extends EventEmitter {
         this.task.logs = [];
 
         this.regenerateItems();
+
+        if (this.task.total === 0) {
+            this.log('任务启动取消：未识别到有效的扫描项');
+            this.task.running = false;
+            this.saveState();
+            return false;
+        }
 
         // 初始化队列
         if (this.queue) {

@@ -1,0 +1,18 @@
+{
+  "streams": [],
+  "settings": {
+    "globalFcc": "",
+    "fccServers": [],
+    "logoTemplate": "http://12.12.12.177:9443/lcmyhome/TVlive/raw/branch/main/LOGO/{name}.png",
+    "groupTitles": [
+      "默认"
+    ],
+    "externalUrl": "",
+    "internalUrl": "",
+    "useInternal": false,
+    "useExternal": false,
+    "securityToken": "",
+    "enableToken": false,
+    "proxyList": []
+  }
+}

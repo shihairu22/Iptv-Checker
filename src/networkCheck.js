@@ -24,14 +24,14 @@ function isMulticast(ip) {
 function checkNetwork(urlStr) {
     return new Promise((resolve) => {
         try {
-            // 处理 rtp://IP:PORT 或 udp://@IP:PORT
-            if (urlStr.startsWith('rtp://') || urlStr.startsWith('udp://')) {
-                // Remove protocol
-                const raw = urlStr.replace(/^(rtp|udp):\/\/@?/, '');
+            // 处理 rtp://IP:PORT 或 udp://@IP:PORT 或是纯 IP:PORT
+            if (urlStr.startsWith('rtp://') || urlStr.startsWith('udp://') || !urlStr.includes('://')) {
+                // 更鲁棒的解析
+                let raw = urlStr.replace(/^(rtp|udp):\/\/@?/, '').replace(/^@/, '');
                 const [host, portStr] = raw.split(':');
                 const port = parseInt(portStr, 10);
 
-                if (!host || !port) {
+                if (!host || isNaN(port) || port <= 0) {
                     resolve(false);
                     return;
                 }
