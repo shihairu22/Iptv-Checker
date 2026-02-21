@@ -61,20 +61,29 @@ async function startServer() {
         await streamService.init();
         logger.info(`初始化数据加载成功，记录数: ${streamService.getStreams().length}`);
 
-        // 路由挂载
-        // 鉴权路由 (不需要保护)
+        // 路由挂载开始
+        const publicDir = path.join(__dirname, '../public');
+
+        // 1. 公开静态资源 (CSS, JS, Vendor 库)
+        // 确保播放器和样式脚本始终可访问，避免因鉴权拦截导致的 404 或 MIME 冲突
+        app.use('/vendor', express.static(path.join(publicDir, 'vendor')));
+        app.use('/css', express.static(path.join(publicDir, 'css')));
+        app.use('/js', express.static(path.join(publicDir, 'js')));
+        app.use('/login.html', express.static(path.join(publicDir, 'login.html')));
+
+        // 2. 鉴权路由 (登录、验证码)
         app.use('/api', authRouter);
 
-        // 静态文件保护和其它路由
-        app.use(['/', '/index.html', '/results', '/results.html', '/api/*'], requireAuth);
+        // 3. 业务逻辑鉴权中间件
+        // 保护所有页面请求及 API 接口
+        app.use(['/', '/index.html', '/results', '/results.html', '/player.html', '/api/*'], requireAuth);
 
-        // 业务路由
+        // 4. 业务 API 路由
         app.use('/api', streamRouter);
         app.use('/api/persist', persistRouter);
-        app.use('/', configRouter);
         app.get('/api/system/info', (req, res) => res.json({ success: true, version: require('../package.json').version }));
 
-        // 流媒体代理模块 (支持内置播放器)
+        // 5. 流媒体代理模块 (GET 请求，不受 CSRF 影响)
         app.get('/api/proxy/stream', async (req, res) => {
             const streamUrl = req.query.url;
             if (!streamUrl) return res.status(400).send('Missing url');
@@ -112,18 +121,18 @@ async function startServer() {
             }
         });
 
-        // 任务管理路由
+        // 6. 任务管理路由
         app.get('/api/task/status', (req, res) => res.json(taskManager.getStatus()));
         app.post('/api/task/start', (req, res) => res.json({ success: taskManager.start(req.body) }));
         app.post('/api/task/stop', (req, res) => { taskManager.stop(); res.json({ success: true }); });
         app.post('/api/task/resume', (req, res) => res.json({ success: taskManager.resume() }));
 
-        // 静态资源
-        app.use(express.static('public'));
+        // 7. 配置相关路由
+        app.use('/', configRouter);
 
-        // 页面辅助路由
-        app.get('/', (req, res) => res.sendFile(path.join(__dirname, '../public/index.html')));
-        app.get('/results', (req, res) => res.sendFile(path.join(__dirname, '../public/results.html')));
+        // 8. 页面回退路由
+        app.get('/', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
+        app.get('/results', (req, res) => res.sendFile(path.join(publicDir, 'results.html')));
 
         // 全局错误处理
 
