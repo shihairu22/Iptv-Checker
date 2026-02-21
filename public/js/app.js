@@ -1,50 +1,14 @@
 /**
- * app.js - 业务逻辑核心
+ * app.js - 业务逻辑核心实现
  */
 
 // --- 全局 Fetch 拦截器 (CSRF 防护适配) ---
-(function() {
-    const originalFetch = window.fetch;
-    window.fetch = function(url, options = {}) {
-        // 仅拦截发往 /api/ 的非安全方法请求
-        if (typeof url === 'string' && url.startsWith('/api/') && options.method && !['GET', 'HEAD', 'OPTIONS'].includes(options.method.toUpperCase())) {
-            options.headers = options.headers || {};
-            if (!(options.headers instanceof Headers)) {
-                options.headers['X-Requested-With'] = 'XMLHttpRequest';
-            } else {
-                options.headers.set('X-Requested-With', 'XMLHttpRequest');
-            }
-        }
-        return originalFetch(url, options);
-    };
-})();
-
-// --- 全局变量 ---
-let allStreams = [];
-let detectCancel = false;
-let detectRunning = false;
-let isTaskPaused = false;
-let lastSearch = '';
-let selectedSet = new Set();
-let pageSize = 20;
-let currentPage = 1;
-let filterStatus = 'online'; // all/online/offline
-let isDockerEnv = false; // 全局 Docker 环境标识
-
-// 图表实例
-let statusChartInstance = null;
-let resolutionChartInstance = null;
-
-// Socket.IO 实例
-const socket = io();
-
-// --- 拦截全局 Fetch 以自动注入 CSRF Header ---
+// 拦截所有发往 /api/ 的非 GET 请求，自动补齐安全校验标头
 (function () {
     const originalFetch = window.fetch;
     window.fetch = function (url, options = {}) {
-        if (typeof url === 'string' && url.startsWith('/api/') && !['GET', 'HEAD', 'OPTIONS'].includes(options.method || 'GET')) {
+        if (typeof url === 'string' && url.startsWith('/api/') && options.method && !['GET', 'HEAD', 'OPTIONS'].includes(options.method.toUpperCase())) {
             options.headers = options.headers || {};
-            // KISS 方案: 注入 CSRF 自定义 Header
             if (options.headers instanceof Headers) {
                 options.headers.set('X-Requested-With', 'XMLHttpRequest');
             } else {
@@ -54,6 +18,23 @@ const socket = io();
         return originalFetch(url, options);
     };
 })();
+
+// --- 全局变量定义 ---
+let allStreams = [];
+let detectCancel = false;
+let detectRunning = false;
+let isTaskPaused = false;
+let lastSearch = '';
+let selectedSet = new Set();
+let pageSize = 20;
+let currentPage = 1;
+let filterStatus = 'online';
+let isDockerEnv = false;
+
+// 图表与 Socket 实例
+let statusChartInstance = null;
+let resolutionChartInstance = null;
+const socket = io();
 
 // --- 登录状态检查 ---
 (async function () {
