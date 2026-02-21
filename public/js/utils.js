@@ -4,6 +4,15 @@
  */
 
 // --- UI 显示相关 ---
+function escapeHTML(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
 
 // 居中确认弹窗
 function showCenterConfirm(msg, callback, onlyOk = false) {
@@ -114,7 +123,7 @@ function showLastResult(data, name, multicastUrl) {
     }
     if (lastResultDiv) {
         lastResultDiv.style.display = '';
-        lastResultDiv.innerHTML = `最近检测：<b>${name || data.name || '-'}</b> | <span style='color:#888;'>${multicastUrl || data.multicastUrl || '-'}</span> | 分辨率:<b>${data.resolution || '-'}</b> | 编码:<b>${data.codec || '-'}</b> | 帧率:<b>${data.frameRate || '-'}</b> | <span style='color:${data.isAvailable ? '#28a745' : '#dc3545'};font-weight:bold;'>${data.isAvailable ? '在线' : '离线'}</span>`;
+        lastResultDiv.innerHTML = `最近检测：<b>${escapeHTML(name || data.name || '-')}</b> | <span style='color:#888;'>${escapeHTML(multicastUrl || data.multicastUrl || '-')}</span> | 分辨率:<b>${escapeHTML(data.resolution || '-')}</b> | 编码:<b>${escapeHTML(data.codec || '-')}</b> | 帧率:<b>${escapeHTML(data.frameRate || '-')}</b> | <span style='color:${data.isAvailable ? '#28a745' : '#dc3545'};font-weight:bold;'>${data.isAvailable ? '在线' : '离线'}</span>`;
     }
 }
 

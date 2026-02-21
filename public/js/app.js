@@ -91,6 +91,7 @@ socket.on('task:update_data', (batch) => {
             allStreams[idx] = { ...allStreams[idx], ...item };
         } else {
             allStreams.push(item);
+            urlMap.set(key, allStreams.length - 1);
         }
     });
 
@@ -424,6 +425,7 @@ function updateStatsAndDisplay() {
 
 
 function renderStreamsList(arr) {
+    const e = typeof escapeHTML === 'function' ? escapeHTML : (s => s);
     const render = arr => arr.map((stream, idx) => `
 <div class="stream-item d-flex align-items-center ${stream.isAvailable ? 'available' : 'unavailable'} p-3 mb-2 rounded border bg-white shadow-sm position-relative overflow-hidden">
     <div class="d-flex align-items-center flex-grow-1 gap-3 flex-wrap">
@@ -431,11 +433,11 @@ function renderStreamsList(arr) {
              <input type="checkbox" class="form-check-input sel-index" data-index="${allStreams.indexOf(stream)}">
         </div>
         
-        ${stream.logo ? `<img src="${stream.logo}" alt="" class="rounded bg-light border" style="width:48px;height:48px;object-fit:contain;" onerror="if(!this.dataset.err){this.dataset.err=1;this.src='/api/proxy/stream?url='+encodeURIComponent(this.src);}">` : '<div class="rounded bg-light border d-flex align-items-center justify-content-center text-muted" style="width:48px;height:48px;"><i class="bi bi-tv"></i></div>'}
+        ${stream.logo ? `<img src="${e(stream.logo)}" alt="" class="rounded bg-light border" style="width:48px;height:48px;object-fit:contain;" onerror="if(!this.dataset.err){this.dataset.err=1;this.src='/api/proxy/stream?url='+encodeURIComponent(this.src);}">` : '<div class="rounded bg-light border d-flex align-items-center justify-content-center text-muted" style="width:48px;height:48px;"><i class="bi bi-tv"></i></div>'}
         
         <div class="d-flex flex-column" style="min-width: 180px; max-width: 300px;">
-            <span class="fw-bold text-dark text-truncate" title="${stream.name || ''}">${stream.name || '未命名频道'}</span>
-            <span class="small text-muted text-truncate font-monospace" title="${stream.multicastUrl}">${stream.multicastUrl}</span>
+            <span class="fw-bold text-dark text-truncate" title="${e(stream.name || '')}">${e(stream.name || '未命名频道')}</span>
+            <span class="small text-muted text-truncate font-monospace" title="${e(stream.multicastUrl)}">${e(stream.multicastUrl)}</span>
         </div>
 
         <div class="d-flex flex-wrap gap-2 align-items-center ms-lg-3">
@@ -443,18 +445,18 @@ function renderStreamsList(arr) {
                 ${stream.isAvailable ? '<i class="bi bi-check-circle-fill me-1"></i>在线' : '<i class="bi bi-x-circle-fill me-1"></i>离线'}
              </span>
              ${stream.isAvailable ? `
-                 <span class="badge bg-light text-dark border">Resolution: ${stream.resolution || '-'}</span>
-                 <span class="badge bg-light text-dark border">FPS: ${stream.frameRate || '-'}</span>
-                 <span class="badge bg-light text-dark border">Codec: ${stream.codec || '-'}</span>
-                 ${stream.hdr && stream.hdr !== '-' && stream.hdr !== 'SDR' ? `<span class="badge ${stream.hdr === 'HDR10' ? 'bg-danger' : stream.hdr === 'HLG' ? 'bg-warning text-dark' : 'bg-info'}">` + stream.hdr + `</span>` : (stream.hdr === 'SDR' ? '<span class="badge bg-secondary">SDR</span>' : '')}
-                 ${stream.audio && stream.audio !== '-' ? `<span class="badge bg-light text-dark border">Audio: ${(stream.audio || '').toUpperCase()}${stream.audioChannels ? (stream.audioChannels >= 8 ? ' 7.1' : stream.audioChannels >= 6 ? ' 5.1' : ' ' + stream.audioChannels + 'ch') : ''}</span>` : ''}
+                 <span class="badge bg-light text-dark border">Resolution: ${e(stream.resolution || '-')}</span>
+                 <span class="badge bg-light text-dark border">FPS: ${e(stream.frameRate || '-')}</span>
+                 <span class="badge bg-light text-dark border">Codec: ${e(stream.codec || '-')}</span>
+                 ${stream.hdr && stream.hdr !== '-' && stream.hdr !== 'SDR' ? `<span class="badge ${stream.hdr === 'HDR10' ? 'bg-danger' : stream.hdr === 'HLG' ? 'bg-warning text-dark' : 'bg-info'}">` + e(stream.hdr) + `</span>` : (stream.hdr === 'SDR' ? '<span class="badge bg-secondary">SDR</span>' : '')}
+                 ${stream.audio && stream.audio !== '-' ? `<span class="badge bg-light text-dark border">Audio: ${e((stream.audio || '').toUpperCase())}${stream.audioChannels ? (stream.audioChannels >= 8 ? ' 7.1' : stream.audioChannels >= 6 ? ' 5.1' : ' ' + e(stream.audioChannels) + 'ch') : ''}</span>` : ''}
              ` : ''}
-             ${stream.groupTitle ? `<span class="badge bg-info text-dark bg-opacity-10 border border-info">Group: ${stream.groupTitle}</span>` : ''}
+             ${stream.groupTitle ? `<span class="badge bg-info text-dark bg-opacity-10 border border-info">Group: ${e(stream.groupTitle)}</span>` : ''}
         </div>
     </div>
 
     <div class="d-flex gap-2 ms-auto align-self-center">
-        <button class="btn btn-sm btn-outline-success" onclick="openPotPlayer('${stream.udpxyUrl}/rtp/${(stream.multicastUrl || '').replace('rtp://', '')}${stream.httpParam ? ('?' + stream.httpParam) : ''}')" title="播放">
+        <button class="btn btn-sm btn-outline-success" onclick="openPotPlayer('${e(stream.udpxyUrl || '')}/rtp/${e((stream.multicastUrl || '').replace('rtp://', ''))}${stream.httpParam ? ('?' + e(stream.httpParam)) : ''}')" title="播放">
             <i class="bi bi-play-fill"></i> <span class="d-none d-md-inline">播放</span>
         </button>
         <button class="btn btn-sm btn-outline-danger" onclick="deleteStream(${allStreams.indexOf(stream)})" title="删除">

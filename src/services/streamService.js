@@ -88,6 +88,7 @@ class StreamService {
                 this.multicastList[idx] = { ...this.multicastList[idx], ...ns };
             } else {
                 this.multicastList.push(ns);
+                urlMap.set(key, this.multicastList.length - 1);
             }
         });
 
