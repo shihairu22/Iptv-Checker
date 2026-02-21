@@ -3,6 +3,7 @@ const { execFile } = require('child_process');
 // 缓存检测结果
 const streamCache = new Map();
 const CACHE_DURATION = 5 * 60 * 1000; // 5分钟缓存
+const inFlight = new Map();
 
 function ffprobeCheck(fullUrl, callback) {
     // 检查缓存
@@ -11,6 +12,12 @@ function ffprobeCheck(fullUrl, callback) {
     if (cached && (now - cached.timestamp) < CACHE_DURATION) {
         return callback(cached.data);
     }
+
+    if (inFlight.has(fullUrl)) {
+        inFlight.get(fullUrl).push(callback);
+        return;
+    }
+    inFlight.set(fullUrl, [callback]);
 
     // 使用json格式输出，返回所有流（视频+音频）
     // 优化参数: -analyzeduration 10000000 (10s), -probesize 5000000 (5MB)
@@ -115,7 +122,11 @@ function ffprobeCheck(fullUrl, callback) {
         };
         // 缓存
         streamCache.set(fullUrl, { data: result, timestamp: Date.now() });
-        callback(result);
+        const callbacks = inFlight.get(fullUrl) || [];
+        inFlight.delete(fullUrl);
+        for (const cb of callbacks) {
+            cb(result);
+        }
     });
 }
 

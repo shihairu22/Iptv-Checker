@@ -47,6 +47,14 @@ app.use((req, res, next) => {
     next();
 });
 
+// 全局进程错误捕获，防止因未捕获的 Promise 等导致进程直接崩溃
+process.on('uncaughtException', (err) => {
+    logger.error(`未捕获的异常 (Uncaught Exception): ${err.stack || err}`);
+});
+process.on('unhandledRejection', (reason, promise) => {
+    logger.error(`未处理的 Promise 拒绝 (Unhandled Rejection): ${reason}`);
+});
+
 // 初始化数据
 async function startServer() {
     try {

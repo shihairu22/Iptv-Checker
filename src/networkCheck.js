@@ -76,6 +76,8 @@ function checkNetwork(urlStr) {
                         }
                     });
                 } catch (e) {
+                    clearTimeout(timer);
+                    try { socket.close(); } catch (_) { }
                     resolve(false);
                 }
 
