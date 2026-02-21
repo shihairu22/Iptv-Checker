@@ -58,13 +58,13 @@ Object.defineProperty(global, 'multicastList', { get: () => streamService.getStr
 
 router.get('/api/config/logo-templates', (req, res) => {
     const defId = 'ltpl-default';
-    const cfg = readJson(CFG_LOGO, { templates: [{ id: defId, name: '榛樿妯℃澘', url: settings.logoTemplate }], currentId: defId });
+    const cfg = readJson(CFG_LOGO, { templates: [{ id: defId, name: '默认模板', url: settings.logoTemplate }], currentId: defId });
     const listRaw = Array.isArray(cfg.templates) ? cfg.templates : [];
     const listObj = listRaw.map(t => {
         if (typeof t === 'string') {
-            return { id: 'ltpl-' + Math.random().toString(36).slice(2) + Date.now().toString(36), name: '未命名模板', url: t, category: '鍐呯綉鍙版爣' };
+            return { id: 'ltpl-' + require('crypto').randomUUID(), name: '未命名模板', url: t, category: '内网台标' };
         }
-        return { id: t.id || ('ltpl-' + Math.random().toString(36).slice(2) + Date.now().toString(36)), name: t.name || '未命名模板', url: t.url || '', category: typeof t.category === 'string' ? (t.category === '鍐呯綉' ? '鍐呯綉鍙版爣' : (t.category === '澶栫綉' ? '澶栫綉鍙版爣' : t.category)) : '鍐呯綉鍙版爣' };
+        return { id: t.id || ('ltpl-' + require('crypto').randomUUID()), name: t.name || '未命名模板', url: t.url || '', category: typeof t.category === 'string' ? (t.category === '内网' ? '内网台标' : (t.category === '外网' ? '外网台标' : t.category)) : '内网台标' };
     }).filter(x => x.url);
     let currId = typeof cfg.currentId === 'string' ? cfg.currentId : '';
     let currUrl = '';
@@ -207,10 +207,10 @@ router.post('/api/settings/update', (req, res) => {
         writeJson(CFG_PROXY, { list: settings.proxyList });
     }
     if (typeof gf === 'string') {
-        globalFcc = gf;
         settings.globalFcc = gf;
         const val = gf.includes('=') ? gf : `fcc=${gf}`;
-        multicastList = multicastList.map(s => ({ ...s, httpParam: val }));
+        // 更新内存中的流列表参数
+        streamService.setStreams(streamService.getStreams().map(s => ({ ...s, httpParam: val })));
     }
     res.json({ success: true, settings });
 });
@@ -281,10 +281,10 @@ router.get('/api/config/epg-sources', (req, res) => {
     const cfg = readJson(CFG_EPG, { sources: [] });
     const list = Array.isArray(cfg.sources) ? cfg.sources : [];
     const normalized = list.map(x => ({
-        id: x && x.id ? x.id : ('epg-' + Math.random().toString(36).slice(2) + Date.now().toString(36)),
+        id: x && x.id ? x.id : ('epg-' + require('crypto').randomUUID()),
         name: x && x.name ? x.name : '未命名EPG',
         url: x && x.url ? x.url : '',
-        scope: (x && x.scope === '澶栫綉' || x && x.scope === '澶栫綉EPG') ? '澶栫綉EPG' : '鍐呯綉EPG'
+        scope: (x && (x.scope === '外网' || x.scope === '外网EPG')) ? '外网EPG' : '内网EPG'
     })).filter(x => !!x.url);
     res.json({ success: true, sources: normalized });
 });

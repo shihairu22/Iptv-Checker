@@ -110,7 +110,6 @@ async function startServer() {
             socket.emit('task:status', taskManager.getStatus());
 
             socket.on('disconnect', () => {
-                // logger.info(`客户端断开: ${socket.id}`);
             });
         });
 

@@ -6,7 +6,7 @@ const { checkNetwork } = require('./networkCheck');
 const persistence = require('./services/persistenceService');
 const streamService = require('./services/streamService');
 const packageJson = require('../package.json');
-// const { Worker } = require('worker_threads'); // Removed Worker
+
 
 const STATE_FILE = 'current_task.json';
 const LOG_SIZE = 50;
@@ -48,11 +48,9 @@ class TaskManager extends EventEmitter {
             logs: [],
             concurrency: 5
         };
-        // this.activeWorkers = 0; // Not used
         this.queue = null; // PQueue instance
         this.resultBuffer = [];
         this.io = null;
-        // this.workers = new Set(); // Removed
 
         // 初始化加载状态
         this.init().catch(err => console.error('Task init failed:', err));

@@ -70,7 +70,6 @@ document.addEventListener('DOMContentLoaded', function () {
 // --- Socket.IO 事件 ---
 socket.on('task:status', updateTaskUI);
 socket.on('task:progress', updateTaskUI);
-// console.log('Server Log:', msg);
 
 // 优化: 接收增量数据更新
 socket.on('task:update_data', (batch) => {
@@ -104,7 +103,6 @@ function updateTaskUI(task) {
 
     if (task.running || task.paused) {
         isTaskPaused = task.paused;
-        // const percent = task.total > 0 ? Math.round((task.finished / task.total) * 100) : 0;
         showProgress(task.finished, task.total,
             task.paused ? `任务暂停 (已完成: ${task.finished}/${task.total}) - 点击“继续检测”恢复` : `正在后台检测: ${task.finished}/${task.total} | 成功: ${task.success} 失败: ${task.fail}`);
 
@@ -122,10 +120,6 @@ function updateTaskUI(task) {
             }
         }
 
-        // 优化: 移除全量拉取，改用 task:update_data 增量更新
-        // if (task.finished % 10 === 0 || task.finished === task.total) {
-        //     getStreams();
-        // }
 
         if (!task.running && !task.paused && task.finished === task.total) {
             showProgress(task.total, task.total, `检测完成 | 总数: ${task.total} 在线: ${task.success} 离线: ${task.fail}`);
@@ -186,7 +180,7 @@ async function checkStream(udpxyUrl, multicastUrl, name = '') {
         const data = await response.json();
         if (!data.success) throw new Error(data.message || '检测失败');
 
-        showProgress(1, 1, `检测完成: ${name || '-'} | 分辨率:${data.resolution || '-'} | 编码:${data.codec || '-'} | 帧率:${data.frameRate || '-'} | ${data.isAvailable ? '✅在线' : '❌离线'}`);
+        showProgress(1, 1, `检测完成: ${escapeHTML(name || data.name || '-')} | 分辨率:${escapeHTML(data.resolution || '-')} | 编码:${escapeHTML(data.codec || '-')} | 帧率:${escapeHTML(data.frameRate || '-')} | ${data.isAvailable ? '✅在线' : '❌离线'}`);
         showLastResult(data, name, multicastUrl);
         setTimeout(() => {
             const total = 1;
@@ -198,7 +192,7 @@ async function checkStream(udpxyUrl, multicastUrl, name = '') {
         }, 1800);
         return data;
     } catch (error) {
-        showProgress(1, 1, `检测失败: ${name || '-'}`);
+        showProgress(1, 1, `检测失败: ${escapeHTML(name || '-')}`);
         setTimeout(hideProgress, 1800);
         console.error('Error:', error);
         return { success: false, message: '请求失败' };
@@ -648,7 +642,6 @@ function exportData(format) {
         exportList.forEach(s => {
             content += `#EXTINF:-1 tvg-name="${s.name}" tvg-logo="${s.logo || ''}" group-title="${s.groupTitle || '默认'}",${s.name}\n`;
             let url = s.multicastUrl;
-            // if (s.udpxyUrl) url = `${s.udpxyUrl}/rtp/${url.replace('rtp://', '')}`;
             content += `${url}\n`;
         });
     } else if (format === 'txt') {
@@ -662,7 +655,6 @@ function exportData(format) {
                 currentGroup = group;
             }
             let url = s.multicastUrl;
-            // if (s.udpxyUrl) url = `${s.udpxyUrl}/rtp/${url.replace('rtp://', '')}`;
             content += `${s.name},${url}\n`;
         });
     }

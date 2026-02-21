@@ -23,7 +23,7 @@ router.get('/captcha', (req, res) => {
         color: true,
         background: '#f0f0f0'
     });
-    const id = 'cap-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const id = 'cap-' + require('crypto').randomBytes(8).toString('hex');
     CAPTCHA_STORE.set(id, { text: captcha.text.toLowerCase(), expires: Date.now() + 5 * 60 * 1000 });
 
     res.cookie('captcha_id', id, { httpOnly: true, maxAge: 5 * 60 * 1000 });
@@ -48,7 +48,7 @@ router.post('/login', async (req, res) => {
 
     const user = await loadUsers();
     if (username === user.username && password === user.password) {
-        const token = 'sess-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+        const token = 'sess-' + require('crypto').randomUUID();
         SESSIONS.set(token, { username, expires: Date.now() + SESSION_TTL });
         res.cookie('auth_token', token, { maxAge: SESSION_TTL, httpOnly: true });
         return res.json({ success: true });
@@ -113,5 +113,4 @@ router.isValidToken = (token) => {
     }
     return true;
 };
-
 module.exports = router;

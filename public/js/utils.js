@@ -180,19 +180,20 @@ function parsePorts(portStr) {
 }
 
 function parseRtpUrl(u) {
-    const s = (u || '').trim();
-    if (!s.startsWith('rtp://')) return null;
-    const body = s.slice(6);
-    const parts = body.split(':');
-    if (parts.length !== 2) return null;
+    let s = (u || '').trim();
+    // 与后端逻辑同步：移除协议前缀和 @ 符号
+    s = s.replace(/^(rtp|udp):\/\/@?/, '').replace(/^@/, '');
+
+    const parts = s.split(':');
+    if (parts.length > 2) return null;
+
     const ip = parts[0];
-    const port = parseInt(parts[1], 10);
+    const port = parts[1] ? parseInt(parts[1], 10) : 0;
 
     const octets = ip.split('.').map(n => parseInt(n, 10));
     if (octets.length !== 4 || octets.some(n => isNaN(n) || n < 0 || n > 255)) return null;
-    if (isNaN(port) || port < 1 || port > 65535) return null;
 
-    return { ip, port };
+    return { ip, port: port || 0 };
 }
 
 function ipv4ToInt(ip) {
