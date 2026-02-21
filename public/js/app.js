@@ -468,9 +468,14 @@ function renderStreamsList(arr) {
     </div>
 
     <div class="d-flex gap-2 ms-auto align-self-center">
-        <button class="btn btn-sm btn-outline-success" onclick="openPotPlayer('${e(stream.udpxyUrl || '')}/rtp/${e((stream.multicastUrl || '').replace('rtp://', ''))}${stream.httpParam ? ('?' + e(stream.httpParam)) : ''}')" title="播放">
-            <i class="bi bi-play-fill"></i> <span class="d-none d-md-inline">播放</span>
-        </button>
+        <div class="btn-group btn-group-sm">
+            <button class="btn btn-outline-success" onclick="openWebPlayer('${e(stream.udpxyUrl || '')}/rtp/${e((stream.multicastUrl || '').replace('rtp://', ''))}${stream.httpParam ? ('?' + e(stream.httpParam)) : ''}', '${e(stream.name || '')}')" title="内置播放">
+                <i class="bi bi-play-btn"></i> <span class="d-none d-md-inline">内置播放</span>
+            </button>
+            <button class="btn btn-outline-success" onclick="openPotPlayer('${e(stream.udpxyUrl || '')}/rtp/${e((stream.multicastUrl || '').replace('rtp://', ''))}${stream.httpParam ? ('?' + e(stream.httpParam)) : ''}')" title="外部播放">
+                <i class="bi bi-play-fill"></i>
+            </button>
+        </div>
         <button class="btn btn-sm btn-outline-danger" onclick="deleteStream(${allStreams.indexOf(stream)})" title="删除">
             <i class="bi bi-trash"></i> <span class="d-none d-md-inline">删除</span>
         </button>
@@ -545,6 +550,11 @@ function openPotPlayer(url) {
             } catch (e) { }
         }
     }, 200);
+}
+
+function openWebPlayer(url, title) {
+    const playerUrl = `./player.html?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}`;
+    window.open(playerUrl, '_blank', 'width=1200,height=800');
 }
 
 // --- 配置与设置相关 ---
