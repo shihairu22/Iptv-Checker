@@ -77,6 +77,31 @@ router.get('/auth/check', (req, res) => {
     res.json({ success: false });
 });
 
+// 修改密码
+router.post('/auth/update', async (req, res) => {
+    const token = req.cookies['auth_token'];
+    if (!token || !SESSIONS.has(token)) return res.status(401).json({ success: false, message: '未登录' });
+
+    const { username, password, oldPassword } = req.body;
+    const user = await loadUsers();
+
+    if (user.password !== oldPassword) {
+        return res.json({ success: false, message: '旧密码错误' });
+    }
+
+    if (username) user.username = username;
+    if (password) user.password = password;
+
+    const ok = await persistence.writeJson('users.json', user);
+    if (!ok) return res.json({ success: false, message: '系统保存失败' });
+
+    // 更新 session
+    const sess = SESSIONS.get(token);
+    sess.username = user.username;
+
+    res.json({ success: true, username: user.username });
+});
+
 // 导出 Session 检查函数供中间件使用
 router.isValidToken = (token) => {
     if (!token) return false;

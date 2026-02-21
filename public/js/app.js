@@ -1128,3 +1128,33 @@ function deleteSelectedVersion() {
     });
 }
 
+async function doChangePwd() {
+    const username = document.getElementById('newUsername').value.trim();
+    const oldPassword = document.getElementById('oldPassword').value;
+    const password = document.getElementById('newPassword').value;
+
+    if (!oldPassword) {
+        showCenterConfirm('请输入旧密码', null, true);
+        return;
+    }
+
+    try {
+        const r = await fetch('/api/auth/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, oldPassword, password })
+        });
+        const j = await r.json();
+        if (j.success) {
+            showCenterConfirm('修改成功，请重新登录', (ok) => {
+                fetch('/api/logout', { method: 'POST' }).finally(() => {
+                    window.location.reload();
+                });
+            }, true);
+        } else {
+            showCenterConfirm(j.message || '修改失败', null, true);
+        }
+    } catch (e) {
+        showCenterConfirm('请求失败', null, true);
+    }
+}
