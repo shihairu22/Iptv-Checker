@@ -2,16 +2,32 @@ const express = require('express');
 const router = express.Router();
 const svgCaptcha = require('svg-captcha');
 const persistence = require('../services/persistenceService');
-const path = require('path');
+const crypto = require('crypto');
 
-// 共享的 Session 存储 (在模块化后可能需要迁移到 Redis 或数据库，暂时保留内存 Map)
+// 共享的 Session 存储 (暂时保留内存 Map)
 const SESSIONS = new Map();
-const SESSION_TTL = 3650 * 24 * 60 * 60 * 1000;
+const SESSION_TTL = 30 * 24 * 60 * 60 * 1000; // 缩短为 30 天
 const CAPTCHA_STORE = new Map();
 
-// 辅助函数
+// --- 密码安全辅助函数 ---
+function hashPassword(password) {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+    return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, storedPassword) {
+    if (!storedPassword.includes(':')) {
+        // 兼容旧版明文密码
+        return password === storedPassword;
+    }
+    const [salt, hash] = storedPassword.split(':');
+    const key = crypto.scryptSync(password, salt, 64).toString('hex');
+    return key === hash;
+}
+
 async function loadUsers() {
-    return await persistence.readJson('users.json', { username: 'admin', password: 'admin' });
+    return await persistence.readJson('users.json', { username: 'admin', password: hashPassword('admin') });
 }
 
 // 验证码接口
@@ -23,7 +39,7 @@ router.get('/captcha', (req, res) => {
         color: true,
         background: '#f0f0f0'
     });
-    const id = 'cap-' + require('crypto').randomBytes(8).toString('hex');
+    const id = 'cap-' + crypto.randomBytes(8).toString('hex');
     CAPTCHA_STORE.set(id, { text: captcha.text.toLowerCase(), expires: Date.now() + 5 * 60 * 1000 });
 
     res.cookie('captcha_id', id, { httpOnly: true, maxAge: 5 * 60 * 1000 });
@@ -47,14 +63,22 @@ router.post('/login', async (req, res) => {
     }
 
     const user = await loadUsers();
-    if (username === user.username && password === user.password) {
-        const token = 'sess-' + require('crypto').randomUUID();
+    if (username === user.username && verifyPassword(password, user.password)) {
+        // 如果是明文密码，自动迁移到加盐哈希
+        if (!user.password.includes(':')) {
+            user.password = hashPassword(password);
+            await persistence.writeJson('users.json', user);
+            console.log(`用户 ${username} 密码已自动升级为安全哈希格式`);
+        }
+
+        const token = 'sess-' + crypto.randomUUID();
         SESSIONS.set(token, { username, expires: Date.now() + SESSION_TTL });
-        res.cookie('auth_token', token, { maxAge: SESSION_TTL, httpOnly: true });
+        res.cookie('auth_token', token, { maxAge: SESSION_TTL, httpOnly: true, sameSite: 'strict' });
         return res.json({ success: true });
     }
     res.json({ success: false, message: '用户名或密码错误' });
 });
+
 // 登出接口
 router.post('/logout', (req, res) => {
     const token = req.cookies['auth_token'];
@@ -72,6 +96,11 @@ router.get('/auth/check', (req, res) => {
     const token = req.cookies['auth_token'];
     if (token && SESSIONS.has(token)) {
         const sess = SESSIONS.get(token);
+        if (Date.now() > sess.expires) {
+            SESSIONS.delete(token);
+            res.clearCookie('auth_token');
+            return res.json({ success: false });
+        }
         return res.json({ success: true, username: sess.username });
     }
     res.json({ success: false });
@@ -85,12 +114,12 @@ router.post('/auth/update', async (req, res) => {
     const { username, password, oldPassword } = req.body;
     const user = await loadUsers();
 
-    if (user.password !== oldPassword) {
+    if (!verifyPassword(oldPassword, user.password)) {
         return res.json({ success: false, message: '旧密码错误' });
     }
 
     if (username) user.username = username;
-    if (password) user.password = password;
+    if (password) user.password = hashPassword(password);
 
     const ok = await persistence.writeJson('users.json', user);
     if (!ok) return res.json({ success: false, message: '系统保存失败' });

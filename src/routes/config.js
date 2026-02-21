@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const path = require('path');
-const fs = require('fs');
+const fs = require('fs').promises;
+const fsSync = require('fs');
 const axios = require('axios');
 const zlib = require('zlib');
 const { XMLParser } = require('fast-xml-parser');
@@ -18,22 +19,27 @@ const CFG_PROXY = path.join(DATA_DIR, 'proxy_servers.json');
 const CFG_APPSET = path.join(DATA_DIR, 'app_settings.json');
 const EPG_DIR = path.join(DATA_DIR, 'epg');
 
-function ensureDataDir() {
-    try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) { }
+async function ensureDataDir() {
+    try { await fs.mkdir(DATA_DIR, { recursive: true }); } catch (e) { }
 }
 function readJson(file, defObj) {
-    ensureDataDir();
     try {
-        if (fs.existsSync(file)) {
-            const txt = fs.readFileSync(file, 'utf-8');
+        if (fsSync.existsSync(file)) {
+            const txt = fsSync.readFileSync(file, 'utf-8');
             return JSON.parse(txt);
         }
     } catch (e) { }
     return defObj;
 }
-function writeJson(file, obj) {
-    ensureDataDir();
-    try { fs.writeFileSync(file, JSON.stringify(obj, null, 2), 'utf-8'); return true; } catch (e) { console.error('写入失败', file); return false; }
+async function writeJson(file, obj) {
+    await ensureDataDir();
+    try {
+        await fs.writeFile(file, JSON.stringify(obj, null, 2), 'utf-8');
+        return true;
+    } catch (e) {
+        console.error('写入失败', file);
+        return false;
+    }
 }
 
 function normalizeProxyType(t) {
@@ -53,8 +59,6 @@ function ensureEpgDir() {
 }
 
 let settings = streamService.settings;
-// Helper forwarder
-Object.defineProperty(global, 'multicastList', { get: () => streamService.getStreams() });
 
 router.get('/api/config/logo-templates', (req, res) => {
     const defId = 'ltpl-default';
@@ -216,15 +220,17 @@ router.post('/api/settings/update', (req, res) => {
 });
 router.post('/api/settings/rename-group', (req, res) => {
     const { from, to } = req.body || {};
-    if (!from || !to) return res.status(400).json({ success: false, message: '缂哄皯鍒嗙粍鍚嶇О' });
+    if (!from || !to) return res.status(400).json({ success: false, message: '缂哄皯鍒嗙bb缁勫鍚嶇О' });
     let updated = 0;
-    multicastList = multicastList.map(s => {
+    const streams = streamService.getStreams();
+    const newStreams = streams.map(s => {
         if ((s.groupTitle || '') === from) {
             updated++;
             return { ...s, groupTitle: to };
         }
         return s;
     });
+    if (updated > 0) streamService.setStreams(newStreams);
     if (Array.isArray(settings.groupTitles)) {
         const idx = settings.groupTitles.findIndex(g => g === from);
         if (idx !== -1) settings.groupTitles[idx] = to;

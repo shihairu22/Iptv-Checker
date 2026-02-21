@@ -409,6 +409,15 @@
   </div>
 
   <script>
+    function escapeHTML(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
     let streams = [];
     let filterStatus = 'all';
     let filterType = 'all';
@@ -600,7 +609,9 @@
         list.forEach(item => {
           const href = item.url && !item.url.startsWith('http') ? (origin + item.url) : item.url;
           const tr = document.createElement('tr');
-          tr.innerHTML = '<td><input class="form-control form-control-sm" id="epgName-' + item.id + '" value="' + (item.name || '') + '"></td><td><input class="form-control form-control-sm" id="epgUrl-' + item.id + '" value="' + (href || '') + '"></td><td><select class="form-select form-select-sm" id="epgScope-' + item.id + '"><option value="内网EPG">内网EPG</option><option value="外网EPG">外网EPG</option></select></td><td><button class="btn btn-outline-danger btn-sm" id="epgDel-' + item.id + '">删除</button></td>';
+          const nameEsc = escapeHTML(item.name || '');
+          const hrefEsc = escapeHTML(href || '');
+          tr.innerHTML = '<td><input class="form-control form-control-sm" id="epgName-' + item.id + '" value="' + nameEsc + '"></td><td><input class="form-control form-control-sm" id="epgUrl-' + item.id + '" value="' + hrefEsc + '"></td><td><select class="form-select form-select-sm" id="epgScope-' + item.id + '"><option value="内网EPG">内网EPG</option><option value="外网EPG">外网EPG</option></select></td><td><button class="btn btn-outline-danger btn-sm" id="epgDel-' + item.id + '">删除</button></td>';
           tbody.appendChild(tr);
           const sel = document.getElementById('epgScope-' + item.id);
           if (sel) sel.value = (item.scope === '外网EPG') ? '外网EPG' : '内网EPG';
@@ -662,7 +673,9 @@
         tbody.innerHTML = '';
         list.forEach(item => {
           const tr = document.createElement('tr');
-          tr.innerHTML = '<td><input class="form-control form-control-sm" id="fccName-' + item.id + '" value="' + (item.name || '') + '"></td><td><input class="form-control form-control-sm" id="fccAddr-' + item.id + '" value="' + (item.addr || '') + '"></td><td><div class="d-flex" style="gap:8px;"><button class="btn btn-outline-primary btn-sm" id="fccSync-' + item.id + '">同步FCC</button><button class="btn btn-outline-danger btn-sm" id="fccDel-' + item.id + '">删除</button></div></td>';
+          const nameEsc = escapeHTML(item.name || '');
+          const addrEsc = escapeHTML(item.addr || '');
+          tr.innerHTML = '<td><input class="form-control form-control-sm" id="fccName-' + item.id + '" value="' + nameEsc + '"></td><td><input class="form-control form-control-sm" id="fccAddr-' + item.id + '" value="' + addrEsc + '"></td><td><div class="d-flex" style="gap:8px;"><button class="btn btn-outline-primary btn-sm" id="fccSync-' + item.id + '">同步FCC</button><button class="btn btn-outline-danger btn-sm" id="fccDel-' + item.id + '">删除</button></div></td>';
           tbody.appendChild(tr);
           const delBtn = document.getElementById('fccDel-' + item.id);
           if (delBtn) delBtn.onclick = function () { tr.remove(); };
@@ -721,7 +734,9 @@
           const tr = document.createElement('tr');
           const nm = (item && item.name ? item.name : '');
           const clr = (item && item.color ? item.color : '#64748b');
-          tr.innerHTML = '<td><div class="d-flex align-items-center" style="gap:8px;"><span class="badge badge-tag" id="groupBadge-' + id + '"></span><input class="form-control form-control-sm" id="groupName-' + id + '" value="' + nm + '" style="flex:1; min-width:160px;"></div></td><td><input type="color" class="form-control form-control-sm" id="groupColor-' + id + '" value="' + clr + '"></td><td><div class="d-flex" style="gap:8px;"><button class="btn btn-outline-primary btn-sm" id="groupRule-' + id + '">规则</button><button class="btn btn-outline-danger btn-sm" id="groupDel-' + id + '">删除</button></div></td>';
+          const nameEsc = escapeHTML(nm);
+          const clrEsc = escapeHTML(clr);
+          tr.innerHTML = '<td><div class="d-flex align-items-center" style="gap:8px;"><span class="badge badge-tag" id="groupBadge-' + id + '"></span><input class="form-control form-control-sm" id="groupName-' + id + '" value="' + nameEsc + '" style="flex:1; min-width:160px;"></div></td><td><input type="color" class="form-control form-control-sm" id="groupColor-' + id + '" value="' + clrEsc + '"></td><td><div class="d-flex" style="gap:8px;"><button class="btn btn-outline-primary btn-sm" id="groupRule-' + id + '">规则</button><button class="btn btn-outline-danger btn-sm" id="groupDel-' + id + '">删除</button></div></td>';
           tr.dataset.oldName = (item && item.name ? item.name : '');
           tbody.appendChild(tr);
           const badge = document.getElementById('groupBadge-' + id);
@@ -3004,8 +3019,9 @@
         if (r.status === 200) {
           const data = await r.json();
           latestSpan.textContent = data.tag_name;
-          // 简单的 Markdown 转 HTML
-          notesDiv.innerHTML = data.body.replace(/\r\n/g, '<br>').replace(/\n/g, '<br>');
+          // 简单的 Markdown 转 HTML (增加 XSS 转义)
+          const safeBody = escapeHTML(data.body || '');
+          notesDiv.innerHTML = safeBody.replace(/\r\n/g, '<br>').replace(/\n/g, '<br>');
 
           const currentVer = document.getElementById('modalCurrentVersion').textContent.replace('v', '').trim();
           const remoteVer = data.tag_name.replace('v', '').trim();

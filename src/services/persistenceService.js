@@ -15,7 +15,15 @@ class PersistenceService {
         }
     }
 
+    validateFilename(filename) {
+        if (!filename || typeof filename !== 'string') return false;
+        // 禁止包含路径分隔符、驱动器符或 .. 
+        if (filename.includes('..') || filename.includes('/') || filename.includes('\\') || filename.includes(':')) return false;
+        return true;
+    }
+
     async readJson(filename, defaultObj = {}) {
+        if (!this.validateFilename(filename)) return defaultObj;
         await this.ensureDataDir();
         const filePath = path.join(this.dataDir, filename);
         try {
@@ -27,6 +35,7 @@ class PersistenceService {
     }
 
     async writeJson(filename, obj) {
+        if (!this.validateFilename(filename)) return false;
         const _write = async () => {
             await this.ensureDataDir();
             const filePath = path.join(this.dataDir, filename);
@@ -47,6 +56,7 @@ class PersistenceService {
     }
 
     async saveWithBackup(filename, payload) {
+        if (!this.validateFilename(filename)) return false;
         const _write = async () => {
             await this.ensureDataDir();
             const filePath = path.join(this.dataDir, filename);

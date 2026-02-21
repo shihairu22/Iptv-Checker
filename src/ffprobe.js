@@ -33,8 +33,9 @@ function ffprobeCheck(fullUrl, callback) {
         '-probesize', '5000000',
         fullUrl
     ];
-    execFile('ffprobe', args, { timeout: 20000 }, (error, stdout, stderr) => {
+    const cp = execFile('ffprobe', args, { timeout: 20000 }, (error, stdout, stderr) => {
         let isAvailable = false;
+        // ... rest of the callback logic remains the same ...
         let frameRate = null;
         let bitRate = null;
         let resolution = null;
@@ -50,7 +51,6 @@ function ffprobeCheck(fullUrl, callback) {
                 const json = JSON.parse(stdout);
                 raw = json;
                 if (json.streams && json.streams.length > 0) {
-                    // 查找第一个视频流
                     const vStream = json.streams.find(s => s.codec_type === 'video');
                     if (vStream) {
                         isAvailable = true;
@@ -59,14 +59,12 @@ function ffprobeCheck(fullUrl, callback) {
                             resolution = `${vStream.width}x${vStream.height}`;
                         }
                         bitRate = vStream.bit_rate ? parseInt(vStream.bit_rate) : null;
-                        // 帧率
                         if (vStream.r_frame_rate && vStream.r_frame_rate.includes('/')) {
                             const [num, den] = vStream.r_frame_rate.split('/').map(Number);
                             if (!isNaN(num) && !isNaN(den) && den !== 0) {
                                 frameRate = (num / den).toFixed(2);
                             }
                         }
-                        // HDR/SDR 检测：通过 color_transfer 和 color_primaries 判断
                         const ct = vStream.color_transfer || '';
                         if (ct === 'smpte2084') {
                             hdr_type = 'HDR10';
@@ -78,7 +76,6 @@ function ffprobeCheck(fullUrl, callback) {
                             hdr_type = 'SDR';
                         }
                     }
-                    // 查找第一个音频流
                     const aStream = json.streams.find(s => s.codec_type === 'audio');
                     if (aStream) {
                         audio_codec = aStream.codec_name || null;
@@ -98,10 +95,7 @@ function ffprobeCheck(fullUrl, callback) {
                     service_name = json.format.tags.service_name || json.format.tags.title || null;
                 }
             }
-        } catch (e) {
-            // 解析异常
-        }
-        // 计算网速
+        } catch (e) { }
         let speed = null;
         if (bitRate) {
             speed = (bitRate / 8 / 1024).toFixed(2) + ' KB/s';
@@ -120,7 +114,6 @@ function ffprobeCheck(fullUrl, callback) {
             audioSampleRate: audio_sample_rate,
             raw
         };
-        // 缓存
         streamCache.set(fullUrl, { data: result, timestamp: Date.now() });
         const callbacks = inFlight.get(fullUrl) || [];
         inFlight.delete(fullUrl);
@@ -128,6 +121,8 @@ function ffprobeCheck(fullUrl, callback) {
             cb(result);
         }
     });
+
+    return cp;
 }
 
 module.exports = { ffprobeCheck };

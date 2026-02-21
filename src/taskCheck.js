@@ -23,10 +23,14 @@ let PQueue;
         console.error('Failed to import p-queue:', e);
         // 提供一个极简的模拟，防止 init 循环死锁
         PQueue = class MockQueue {
-            constructor() { this.concurrency = 1; }
+            constructor(opts) {
+                this.concurrency = (opts && opts.concurrency) || 1;
+                this.autoStart = (opts && opts.autoStart) !== false;
+            }
             add(fn) { fn(); return Promise.resolve(); }
             pause() { }
             clear() { }
+            start() { }
         };
     }
 })();
@@ -50,6 +54,7 @@ class TaskManager extends EventEmitter {
         };
         this.queue = null; // PQueue instance
         this.resultBuffer = [];
+        this.activeProcesses = new Set(); // 追踪运行中的子进程
         this.io = null;
 
         // 初始化加载状态
@@ -274,7 +279,8 @@ class TaskManager extends EventEmitter {
 
         this.task.type = params.type || 'batch';
         this.task.params = params;
-        this.task.concurrency = parseInt(params.concurrency) || 20;
+        // 限制并发上限
+        this.task.concurrency = Math.min(parseInt(params.concurrency) || 20, 500);
         this.task.startTime = Date.now();
         this.task.finished = 0;
         this.task.successCount = 0;
@@ -350,10 +356,13 @@ class TaskManager extends EventEmitter {
             this.queue.clear();
         }
 
-        // Direct Mode 下不需要 terminate workers，p-queue clear 即可阻止新任务。
-        // 正在运行的任务会继续完成（无法强制 kill exec，除非记录 child process 引用，暂时不复杂化）
+        // 立即杀灭正在运行的子进程，释放系统资源
+        for (const cp of this.activeProcesses) {
+            try { cp.kill(); } catch (e) { }
+        }
+        this.activeProcesses.clear();
 
-        this.log('任务已手动暂停，正在运行的任务稍后停止');
+        this.log('任务已手动暂停，正在运行的任务已强制停止并清理');
         this.saveState();
     }
 
@@ -411,7 +420,8 @@ class TaskManager extends EventEmitter {
                 }
 
                 // 2. Heavy FFprobe Check
-                ffprobeCheck(fullUrl, (data) => {
+                const cp = ffprobeCheck(fullUrl, (data) => {
+                    this.activeProcesses.delete(cp);
                     if (data.isAvailable) {
                         this.handleResult(item, data);
                         this.finalizeItem();
@@ -427,6 +437,7 @@ class TaskManager extends EventEmitter {
                         }
                     }
                 });
+                if (cp) this.activeProcesses.add(cp);
             };
 
             executeParamCheck();

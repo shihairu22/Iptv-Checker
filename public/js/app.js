@@ -21,6 +21,23 @@ let resolutionChartInstance = null;
 // Socket.IO 实例
 const socket = io();
 
+// --- 拦截全局 Fetch 以自动注入 CSRF Header ---
+(function () {
+    const originalFetch = window.fetch;
+    window.fetch = function (url, options = {}) {
+        if (typeof url === 'string' && url.startsWith('/api/') && !['GET', 'HEAD', 'OPTIONS'].includes(options.method || 'GET')) {
+            options.headers = options.headers || {};
+            // KISS 方案: 注入 CSRF 自定义 Header
+            if (options.headers instanceof Headers) {
+                options.headers.set('X-Requested-With', 'XMLHttpRequest');
+            } else {
+                options.headers['X-Requested-With'] = 'XMLHttpRequest';
+            }
+        }
+        return originalFetch(url, options);
+    };
+})();
+
 // --- 登录状态检查 ---
 (async function () {
     try {
