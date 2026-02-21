@@ -553,7 +553,7 @@ function openPotPlayer(url) {
 }
 
 function openWebPlayer(url, title) {
-    const playerUrl = `./player.html?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}`;
+    const playerUrl = `/player.html?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}`;
     window.open(playerUrl, '_blank', 'width=1200,height=800');
 }
 
