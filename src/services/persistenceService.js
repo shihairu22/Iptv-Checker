@@ -51,18 +51,22 @@ class PersistenceService {
             await this.ensureDataDir();
             const filePath = path.join(this.dataDir, filename);
             const tempPath = filePath + `.${Date.now()}.tmp`;
+
+            // Generate timestamped backup
+            const ts = new Date();
+            const pad = (n) => String(n).padStart(2, '0');
+            const stamp = `${ts.getFullYear()}${pad(ts.getMonth() + 1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}`;
+            const backupName = filename.replace('.json', '') + `-${stamp}.json`;
+            const backupPath = path.join(this.dataDir, backupName);
+
             try {
                 const content = JSON.stringify(payload, null, 2);
+
+                // 写入当前主文件
                 await fs.writeFile(tempPath, content, 'utf-8');
                 await fs.rename(tempPath, filePath);
 
-                // Generate timestamped backup
-                const ts = new Date();
-                const pad = (n) => String(n).padStart(2, '0');
-                const stamp = `${ts.getFullYear()}${pad(ts.getMonth() + 1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}`;
-                const backupName = filename.replace('.json', '') + `-${stamp}.json`;
-                const backupPath = path.join(this.dataDir, backupName);
-
+                // 写入备份存档
                 await fs.writeFile(backupPath, content, 'utf-8');
                 return true;
             } catch (e) {

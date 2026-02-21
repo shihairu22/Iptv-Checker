@@ -7,7 +7,7 @@ const { requireAuth } = require('../middleware/auth');
 // 获取备份列表
 router.get('/list', requireAuth, async (req, res) => {
     try {
-        const entries = await persistence.listBackups(/^streams-\d{14}\.json$/);
+        const entries = await persistence.listBackups(/^streams-\d{8}-\d{6}\.json$/);
         const mapped = entries.map(e => ({
             file: e.file,
             time: e.time
