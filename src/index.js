@@ -74,6 +74,44 @@ async function startServer() {
         app.use('/', configRouter);
         app.get('/api/system/info', (req, res) => res.json({ success: true, version: require('../package.json').version }));
 
+        // 流媒体代理模块 (支持内置播放器)
+        app.get('/api/proxy/stream', async (req, res) => {
+            const streamUrl = req.query.url;
+            if (!streamUrl) return res.status(400).send('Missing url');
+            try {
+                const response = await axios({
+                    method: 'get',
+                    url: streamUrl,
+                    responseType: 'stream',
+                    timeout: 10000,
+                    headers: { 'User-Agent': 'IPTV-Checker/1.0' }
+                });
+                res.setHeader('Content-Type', 'video/mp2t');
+                response.data.pipe(res);
+                res.on('close', () => { if (response.data.destroy) response.data.destroy(); });
+            } catch (e) {
+                res.status(500).send('Proxy error: ' + e.message);
+            }
+        });
+
+        app.get('/api/proxy/hls', async (req, res) => {
+            const streamUrl = req.query.url;
+            if (!streamUrl) return res.status(400).send('Missing url');
+            try {
+                const response = await axios({
+                    method: 'get',
+                    url: streamUrl,
+                    responseType: 'stream',
+                    timeout: 10000
+                });
+                res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+                response.data.pipe(res);
+                res.on('close', () => { if (response.data.destroy) response.data.destroy(); });
+            } catch (e) {
+                res.status(500).send('Proxy error: ' + e.message);
+            }
+        });
+
         // 任务管理路由
         app.get('/api/task/status', (req, res) => res.json(taskManager.getStatus()));
         app.post('/api/task/start', (req, res) => res.json({ success: taskManager.start(req.body) }));

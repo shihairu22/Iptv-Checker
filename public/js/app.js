@@ -553,7 +553,9 @@ function openPotPlayer(url) {
 }
 
 function openWebPlayer(url, title) {
-    const playerUrl = `/player.html?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}`;
+    const isM3u8 = /\.m3u8(\?|$)/i.test(url) || url.includes('m3u8');
+    const playUrl = isM3u8 ? (`/api/proxy/hls?url=${encodeURIComponent(url)}`) : (`/api/proxy/stream?url=${encodeURIComponent(url)}`);
+    const playerUrl = `/player.html?url=${encodeURIComponent(playUrl)}&title=${encodeURIComponent(title)}`;
     window.open(playerUrl, '_blank', 'width=1200,height=800');
 }
 

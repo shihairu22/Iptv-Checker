@@ -89,7 +89,6 @@
             const qierPlayer = new QierPlayer({
                 container: document.getElementById('app'),
                 videoProps: {
-                    src: rawUrl,
                     autoplay: true,
                     controls: true
                 },
@@ -98,21 +97,39 @@
                 }
             });
 
-            // 携带本地 v1.4.1 的 CSRF Token
+            const video = qierPlayer.video;
             const csrfToken = localStorage.getItem('csrf_token') || '';
 
-            // 如果是 HLS 流，附加安全头信息 (如果 Proxy 支持)
-            if (rawUrl.endsWith('.m3u8')) {
+            // HLS 逻辑
+            if (rawUrl.includes('/api/proxy/hls') || rawUrl.endsWith('.m3u8')) {
                 if (Hls.isSupported()) {
                     const hls = new Hls({
                         xhrSetup: function (xhr, url) {
                             xhr.setRequestHeader('X-CSRF-Token', csrfToken);
-                            xhr.setRequestHeader('X-App-Version', 'v1.4.1-cherry-pick');
                         }
                     });
                     hls.loadSource(rawUrl);
-                    hls.attachMedia(qierPlayer.video);
+                    hls.attachMedia(video);
+                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    video.src = rawUrl;
                 }
+            }
+            // MPEG-TS 逻辑 (处理 udpxy 等流)
+            else if (rawUrl.includes('/api/proxy/stream') || rawUrl.includes('/rtp/')) {
+                if (mpegts.getFeatureList().mseLivePlayback) {
+                    const player = mpegts.createPlayer({
+                        type: 'mse', // 或者 'mpegts'
+                        isLive: true,
+                        url: rawUrl
+                    });
+                    player.attachMediaElement(video);
+                    player.load();
+                    player.play();
+                } else {
+                    video.src = rawUrl;
+                }
+            } else {
+                video.src = rawUrl;
             }
         })();
     </script>
