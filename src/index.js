@@ -63,8 +63,14 @@ async function startServer() {
         // 业务路由
         app.use('/api', streamRouter);
         app.use('/api/persist', persistRouter);
-        app.use('/api', configRouter);
+        app.use('/', configRouter);
         app.get('/api/system/info', (req, res) => res.json({ success: true, version: require('../package.json').version }));
+
+        // 任务管理路由
+        app.get('/api/task/status', (req, res) => res.json(taskManager.getStatus()));
+        app.post('/api/task/start', (req, res) => res.json({ success: taskManager.start(req.body) }));
+        app.post('/api/task/stop', (req, res) => { taskManager.stop(); res.json({ success: true }); });
+        app.post('/api/task/resume', (req, res) => res.json({ success: taskManager.resume() }));
 
         // 静态资源
         app.use(express.static('public'));

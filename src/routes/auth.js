@@ -55,6 +55,17 @@ router.post('/login', async (req, res) => {
     }
     res.json({ success: false, message: '用户名或密码错误' });
 });
+// 登出接口
+router.post('/logout', (req, res) => {
+    const token = req.cookies['auth_token'];
+    if (token) {
+        const sess = SESSIONS.get(token);
+        if (sess) console.log(`用户 ${sess.username} 退出登录`);
+        SESSIONS.delete(token);
+    }
+    res.clearCookie('auth_token');
+    res.json({ success: true });
+});
 
 // 检查状态
 router.get('/auth/check', (req, res) => {

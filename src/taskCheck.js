@@ -169,7 +169,7 @@ class TaskManager extends EventEmitter {
 
             const ipToInt = (ip) => {
                 const parts = ip.split('.').map(Number);
-                return (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3];
+                return ((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0;
             };
 
             const intToIp = (intv) => {
@@ -199,6 +199,7 @@ class TaskManager extends EventEmitter {
 
             const s = parseRtp(startUrl);
             const e = parseRtp(endUrl);
+            this.log(`Range init: startUrl=${startUrl} endUrl=${endUrl} s=${JSON.stringify(s)} e=${JSON.stringify(e)}`);
 
             if (s && e) {
                 let startIp = ipToInt(s.host);
@@ -223,6 +224,8 @@ class TaskManager extends EventEmitter {
                         });
                     }
                 }
+            } else {
+                this.log(`Range parse failed. s=${!!s} e=${!!e}`);
             }
         }
 
