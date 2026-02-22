@@ -88,9 +88,23 @@ async function startServer() {
         app.get('/api/system/info', (req, res) => res.json({ success: true, version: require('../package.json').version }));
 
         // 5. 流媒体代理模块 (GET 请求，不受 CSRF 影响)
+        // URL 安全校验：仅允许 http/https，屏蔽本地回环和链路本地地址
+        function isUrlSafe(urlStr) {
+            try {
+                const u = new URL(urlStr);
+                if (!['http:', 'https:'].includes(u.protocol)) return false;
+                const host = u.hostname;
+                if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return false;
+                if (host.startsWith('169.254.')) return false;
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
         app.get('/api/proxy/stream', async (req, res) => {
             const streamUrl = req.query.url;
             if (!streamUrl) return res.status(400).send('Missing url');
+            if (!isUrlSafe(streamUrl)) return res.status(403).send('URL not allowed');
             try {
                 const response = await axios({
                     method: 'get',
@@ -110,6 +124,7 @@ async function startServer() {
         app.get('/api/proxy/hls', async (req, res) => {
             const streamUrl = req.query.url;
             if (!streamUrl) return res.status(400).send('Missing url');
+            if (!isUrlSafe(streamUrl)) return res.status(403).send('URL not allowed');
             try {
                 const response = await axios({
                     method: 'get',
@@ -141,8 +156,26 @@ async function startServer() {
 
         // 全局错误处理
 
-        // ... (省略中间代码) ...
-
+        // 7. 远程文件抓取（前端“从网络加载 m3u/txt”功能）
+        app.post('/api/fetch-text', async (req, res) => {
+            const { urls } = req.body;
+            if (!Array.isArray(urls) || urls.length === 0) {
+                return res.status(400).json({ success: false, message: 'Missing urls' });
+            }
+            const limited = urls.slice(0, 10);
+            const results = await Promise.allSettled(limited.map(async (url) => {
+                if (typeof url !== 'string' || (!url.startsWith('http://') && !url.startsWith('https://'))) {
+                    return { url, ok: false, error: 'Invalid URL' };
+                }
+                try {
+                    const resp = await axios.get(url, { timeout: 15000, responseType: 'text', maxContentLength: 5 * 1024 * 1024 });
+                    return { url, ok: true, text: resp.data };
+                } catch (e) {
+                    return { url, ok: false, error: e.message };
+                }
+            }));
+            res.json({ success: true, results: results.map(r => r.value || r.reason) });
+        });
         app.use((err, req, res, next) => {
             logger.error(`系统错误: ${err.stack}`);
             res.status(500).json({ success: false, message: '服务器内部错误' });
@@ -153,8 +186,8 @@ async function startServer() {
         });
 
         // 初始化 Socket.IO
-        const io = socketIo(server, { 
-            cors: { 
+        const io = socketIo(server, {
+            cors: {
                 origin: '*'
             }
         });

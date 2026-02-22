@@ -49,9 +49,9 @@ function normalizeProxyType(t) {
     return '组播代理';
 }
 
-function ensureEpgDir() {
+async function ensureEpgDir() {
     try {
-        if (!fs.existsSync(EPG_DIR)) fs.mkdirSync(EPG_DIR, { recursive: true });
+        await fs.mkdir(EPG_DIR, { recursive: true });
     } catch (e) { }
 }
 
@@ -105,7 +105,7 @@ router.post('/api/config/logo-templates', async (req, res) => {
     if (!currId && listObj[0]) currId = listObj[0].id;
     const currItem = listObj.find(x => x.id === currId) || listObj[0] || null;
     const currUrl = currItem ? currItem.url : '';
-    
+
     if (await writeJson(CFG_LOGO, { templates: listObj, currentId: currId })) {
         settings.logoTemplate = currUrl || settings.logoTemplate;
         res.json({ success: true });
@@ -206,7 +206,7 @@ router.post('/api/settings/update', async (req, res) => {
     if (typeof useExternal === 'boolean') settings.useExternal = useExternal;
     if (typeof securityToken === 'string') settings.securityToken = securityToken;
     if (typeof enableToken === 'boolean') settings.enableToken = enableToken;
-    
+
     let ok = true;
     if (typeof externalUrl === 'string' || typeof internalUrl === 'string' || typeof useInternal === 'boolean' || typeof useExternal === 'boolean' || typeof securityToken === 'string' || typeof enableToken === 'boolean') {
         ok = await writeJson(CFG_APPSET, {
@@ -218,7 +218,7 @@ router.post('/api/settings/update', async (req, res) => {
             enableToken: settings.enableToken
         });
     }
-    
+
     if (Array.isArray(proxyList)) {
         settings.proxyList = proxyList.map(x => ({
             type: normalizeProxyType(x && x.type),
@@ -227,7 +227,7 @@ router.post('/api/settings/update', async (req, res) => {
         const ok2 = await writeJson(CFG_PROXY, { list: settings.proxyList });
         ok = ok && ok2;
     }
-    
+
     if (typeof gf === 'string') {
         settings.globalFcc = gf;
         const val = gf.includes('=') ? gf : `fcc=${gf}`;
@@ -235,7 +235,7 @@ router.post('/api/settings/update', async (req, res) => {
         streamService.setStreams(streamService.getStreams().map(s => ({ ...s, httpParam: val })));
         await streamService.save();
     }
-    
+
     if (ok) {
         res.json({ success: true, settings });
     } else {

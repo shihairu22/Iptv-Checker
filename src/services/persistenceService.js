@@ -106,7 +106,7 @@ class PersistenceService {
     }
 
     async deleteBackup(filename) {
-        if (!filename || filename.includes('..') || filename.includes('/')) return false;
+        if (!this.validateFilename(filename)) return false;
         try {
             const p = path.join(this.dataDir, filename);
             await fs.unlink(p);

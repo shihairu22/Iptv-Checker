@@ -105,7 +105,7 @@ class StreamService {
     }
 
     deleteStream(idx) {
-        if (!!this.multicastList[idx]) {
+        if (idx >= 0 && idx < this.multicastList.length) {
             this.multicastList.splice(idx, 1);
             this.save();
             return true;

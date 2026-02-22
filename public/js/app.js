@@ -628,22 +628,22 @@ function addUdpxy(name, url) {
         return;
     }
     if (!name) name = '未命名服务器';
-    
+
     // 测试服务器可用性
     (async () => {
         try {
             const testUrl = url.endsWith('/') ? url + 'status' : url + '/status';
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 5000);
-            
+
             try {
-                const response = await fetch(testUrl, { 
-                    method: 'GET', 
+                const response = await fetch(testUrl, {
+                    method: 'GET',
                     signal: controller.signal,
                     mode: 'no-cors'
                 });
                 clearTimeout(timeoutId);
-                
+
                 const list = getUdpxyServers();
                 const id = String(Date.now());
                 list.push({ id, name, url });
@@ -651,7 +651,7 @@ function addUdpxy(name, url) {
                 setCurrentUdpxyId(id);
                 renderUdpxySelect();
                 syncUdpxyServersBackend();
-                
+
                 showCenterConfirm(`✓ 服务器 "${name}" 已添加\n地址: ${url}`, null, false);
             } catch (timeoutErr) {
                 clearTimeout(timeoutId);
@@ -663,7 +663,7 @@ function addUdpxy(name, url) {
                 setCurrentUdpxyId(id);
                 renderUdpxySelect();
                 syncUdpxyServersBackend();
-                
+
                 showCenterConfirm(`⚠️ 服务器响应超时或离线\n地址: ${url}\n已保存配置，请检查网络连接`, null, true);
             }
         } catch (e) {
@@ -675,7 +675,7 @@ function addUdpxy(name, url) {
             setCurrentUdpxyId(id);
             renderUdpxySelect();
             syncUdpxyServersBackend();
-            
+
             showCenterConfirm(`⚠️ 无法验证服务器（网络可能受限）\n地址: ${url}`, null, true);
         }
     })();
@@ -690,14 +690,14 @@ function deleteCurrentUdpxy() {
     const idx = list.findIndex(s => s.id === curr);
     if (idx >= 0) list.splice(idx, 1);
     saveUdpxyServers(list);
-    
+
     if (list.length > 0) {
         setCurrentUdpxyId(list[0].id);
     } else {
         localStorage.removeItem(UDP_CURR_KEY);
         showCenterConfirm('⚠️ 已删除最后一个 UDPXY 服务器\n请添加新的 UDPXY 服务器地址以继续使用', null, true);
     }
-    
+
     renderUdpxySelect();
     syncUdpxyServersBackend();
 }
@@ -883,7 +883,7 @@ function bindUIEvents() {
     const batchDeleteBtn = document.getElementById('batchDeleteBtn');
     if (batchDeleteBtn) {
         batchDeleteBtn.onclick = async function () {
-            const arr = Array.from(selectedSet);
+            const arr = Array.from(selectedSet).sort((a, b) => b - a); // descending to avoid index shift
             if (arr.length === 0) return;
             showCenterConfirm(`确定删除选中的 ${arr.length} 个频道吗？`, async function (ok) {
                 if (!ok) return;

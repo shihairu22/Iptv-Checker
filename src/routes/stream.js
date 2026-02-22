@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const streamService = require('../services/streamService');
-const taskManager = require('../taskCheck');
 const { ffprobeCheck } = require('../ffprobe');
 
 // 获取所有流
@@ -9,28 +8,9 @@ router.get('/streams', (req, res) => {
     res.json({ success: true, streams: streamService.getStreams() });
 });
 
-// 任务状态
-router.get('/task/status', (req, res) => res.json(taskManager.getStatus()));
-
 // 统计信息
 router.get('/stats', (req, res) => {
     res.json({ success: true, stats: streamService.getStats() });
-});
-
-// 启动任务
-router.post('/task/start', (req, res) => {
-    res.json({ success: taskManager.start(req.body) });
-});
-
-// 停止任务
-router.post('/task/stop', (req, res) => {
-    taskManager.stop();
-    res.json({ success: true });
-});
-
-// 恢复任务
-router.post('/task/resume', (req, res) => {
-    res.json({ success: taskManager.resume() });
 });
 
 // 单条检测

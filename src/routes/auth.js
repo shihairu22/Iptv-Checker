@@ -55,6 +55,22 @@ function deleteSession(token) {
 
 (async () => { await loadSessions(); })();
 
+// 每小时清理过期 Session，防止内存累积
+setInterval(() => {
+    const now = Date.now();
+    let cleaned = 0;
+    for (const [token, sess] of SESSIONS) {
+        if (now > sess.expires) {
+            SESSIONS.delete(token);
+            cleaned++;
+        }
+    }
+    if (cleaned > 0) {
+        scheduleSaveSessions();
+        console.log(`[Auth] 已清理 ${cleaned} 个过期 Session`);
+    }
+}, 60 * 60 * 1000);
+
 // --- 密码安全辅助函数 ---
 function hashPassword(password) {
     const salt = crypto.randomBytes(16).toString('hex');
