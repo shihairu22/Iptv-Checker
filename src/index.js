@@ -73,7 +73,6 @@ async function startServer() {
         app.use('/css', express.static(path.join(publicDir, 'css')));
         app.use('/js', express.static(path.join(publicDir, 'js')));
         app.use('/login.html', express.static(path.join(publicDir, 'login.html')));
-        app.use('/player.html', express.static(path.join(publicDir, 'player.html')));
 
         // 2. 鉴权路由 (登录、验证码)
         app.use('/api', authRouter);
@@ -137,6 +136,7 @@ async function startServer() {
         // 8. 页面回退路由
         app.get('/', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
         app.get('/results', (req, res) => res.sendFile(path.join(publicDir, 'results.html')));
+        app.get('/player.html', (req, res) => res.sendFile(path.join(publicDir, 'player.html')));
 
         // 全局错误处理
 
