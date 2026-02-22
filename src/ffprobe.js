@@ -36,6 +36,13 @@ function ffprobeCheck(fullUrl, callback) {
     const cp = execFile('ffprobe', args, { timeout: 20000 }, (error, stdout, stderr) => {
         let isAvailable = false;
         // ... rest of the callback logic remains the same ...
+        // ... (lines omitted for brevity, logic inside callback is unchanged) ...
+    
+    // ... (rest of the file)
+    
+    return cp;
+}
+        // ... rest of the callback logic remains the same ...
         let frameRate = null;
         let bitRate = null;
         let resolution = null;

@@ -280,7 +280,7 @@ class TaskManager extends EventEmitter {
         this.task.type = params.type || 'batch';
         this.task.params = params;
         // 限制并发上限
-        this.task.concurrency = Math.min(parseInt(params.concurrency) || 20, 500);
+        this.task.concurrency = Math.min(parseInt(params.concurrency) || 20, 50);
         this.task.startTime = Date.now();
         this.task.finished = 0;
         this.task.successCount = 0;
@@ -386,58 +386,65 @@ class TaskManager extends EventEmitter {
             let attempts = 0;
 
             const executeParamCheck = async () => {
-                attempts++;
+                try {
+                    attempts++;
 
-                // 如果任务中途暂停，停止重试
-                if (!this.task.running) {
-                    resolve();
-                    return;
-                }
-
-                // 1. Pre-flight Network Check (Fast Fail)
-                const isNetAlive = await checkNetwork(fullUrl);
-
-                // Double check running state after await
-                if (!this.task.running) {
-                    resolve();
-                    return;
-                }
-
-                if (!isNetAlive) {
-                    // 网络不可达，直接失败，不走 ffprobe，也不重试 (网络都不通，重试大概率没用且浪费时间)
-                    // 除非 retry 是针对不稳定网络的? 
-                    // 这里策略：如果是 "dead link" (端口关/无组播流)，直接判定无效
-                    // 为了保守起见，如果还有重试次数，也可以 continue。但为了性能，我们假设 1s 收不到包就是死的。
-                    if (attempts < maxAttempts) {
-                        // 稍微 delay 一下再重试，万一是网络抖动
-                        setTimeout(executeParamCheck, 1000);
-                    } else {
-                        this.task.failCount++;
-                        this.finalizeItem();
+                    // 如果任务中途暂停，停止重试
+                    if (!this.task.running) {
                         resolve();
+                        return;
                     }
-                    return;
-                }
 
-                // 2. Heavy FFprobe Check
-                const cp = ffprobeCheck(fullUrl, (data) => {
-                    this.activeProcesses.delete(cp);
-                    if (data.isAvailable) {
-                        this.handleResult(item, data);
-                        this.finalizeItem();
+                    // 1. Pre-flight Network Check (Fast Fail)
+                    const isNetAlive = await checkNetwork(fullUrl);
+
+                    // Double check running state after await
+                    if (!this.task.running) {
                         resolve();
-                    } else {
-                        if (attempts < maxAttempts && this.task.running) {
-                            // Retry delay
+                        return;
+                    }
+
+                    if (!isNetAlive) {
+                        // 网络不可达，直接失败，不走 ffprobe，也不重试 (网络都不通，重试大概率没用且浪费时间)
+                        // 除非 retry 是针对不稳定网络的? 
+                        // 这里策略：如果是 "dead link" (端口关/无组播流)，直接判定无效
+                        // 为了保守起见，如果还有重试次数，也可以 continue。但为了性能，我们假设 1s 收不到包就是死的。
+                        if (attempts < maxAttempts) {
+                            // 稍微 delay 一下再重试，万一是网络抖动
                             setTimeout(executeParamCheck, 1000);
                         } else {
                             this.task.failCount++;
                             this.finalizeItem();
                             resolve();
                         }
+                        return;
                     }
-                });
-                if (cp) this.activeProcesses.add(cp);
+
+                    // 2. Heavy FFprobe Check
+                    const cp = ffprobeCheck(fullUrl, (data) => {
+                        this.activeProcesses.delete(cp);
+                        if (data.isAvailable) {
+                            this.handleResult(item, data);
+                            this.finalizeItem();
+                            resolve();
+                        } else {
+                            if (attempts < maxAttempts && this.task.running) {
+                                // Retry delay
+                                setTimeout(executeParamCheck, 1000);
+                            } else {
+                                this.task.failCount++;
+                                this.finalizeItem();
+                                resolve();
+                            }
+                        }
+                    });
+                    if (cp) this.activeProcesses.add(cp);
+                } catch (e) {
+                    console.error(`[Task] Error checking ${fullUrl}:`, e);
+                    this.task.failCount++;
+                    this.finalizeItem();
+                    resolve();
+                }
             };
 
             executeParamCheck();

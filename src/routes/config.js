@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const fs = require('fs').promises;
-const fsSync = require('fs');
 const axios = require('axios');
 const zlib = require('zlib');
 const { XMLParser } = require('fast-xml-parser');
@@ -22,12 +21,10 @@ const EPG_DIR = path.join(DATA_DIR, 'epg');
 async function ensureDataDir() {
     try { await fs.mkdir(DATA_DIR, { recursive: true }); } catch (e) { }
 }
-function readJson(file, defObj) {
+async function readJson(file, defObj) {
     try {
-        if (fsSync.existsSync(file)) {
-            const txt = fsSync.readFileSync(file, 'utf-8');
-            return JSON.parse(txt);
-        }
+        const txt = await fs.readFile(file, 'utf-8');
+        return JSON.parse(txt);
     } catch (e) { }
     return defObj;
 }
@@ -60,9 +57,9 @@ function ensureEpgDir() {
 
 let settings = streamService.settings;
 
-router.get('/api/config/logo-templates', (req, res) => {
+router.get('/api/config/logo-templates', async (req, res) => {
     const defId = 'ltpl-default';
-    const cfg = readJson(CFG_LOGO, { templates: [{ id: defId, name: '默认模板', url: settings.logoTemplate }], currentId: defId });
+    const cfg = await readJson(CFG_LOGO, { templates: [{ id: defId, name: '默认模板', url: settings.logoTemplate }], currentId: defId });
     const listRaw = Array.isArray(cfg.templates) ? cfg.templates : [];
     const listObj = listRaw.map(t => {
         if (typeof t === 'string') {
@@ -88,7 +85,7 @@ router.post('/api/config/logo-templates', (req, res) => {
         id: t && t.id ? t.id : ('ltpl-' + Math.random().toString(36).slice(2) + Date.now().toString(36)),
         name: t && t.name ? t.name : '未命名模板',
         url: t && t.url ? t.url : '',
-        category: t && typeof t.category === 'string' ? t.category : '鍐呯綉鍙版爣'
+        category: t && typeof t.category === 'string' ? t.category : '内网台标'
     })) : [];
     if (listObj.length === 0) {
         const listStr = Array.isArray(templates) ? templates : [];
@@ -96,7 +93,7 @@ router.post('/api/config/logo-templates', (req, res) => {
             id: 'ltpl-' + Math.random().toString(36).slice(2) + Date.now().toString(36),
             name: '未命名模板',
             url: u,
-            category: '鍐呯綉鍙版爣'
+            category: '内网台标'
         }));
     }
     listObj = listObj.filter(x => x.url);
@@ -112,8 +109,8 @@ router.post('/api/config/logo-templates', (req, res) => {
     settings.logoTemplate = currUrl || settings.logoTemplate;
     res.json({ success: true });
 });
-router.get('/api/config/fcc-servers', (req, res) => {
-    const cfg = readJson(CFG_FCC, { servers: settings.fccServers, currentId: '' });
+router.get('/api/config/fcc-servers', async (req, res) => {
+    const cfg = await readJson(CFG_FCC, { servers: settings.fccServers, currentId: '' });
     res.json({ success: true, servers: Array.isArray(cfg.servers) ? cfg.servers : [], currentId: cfg.currentId || '' });
 });
 router.post('/api/config/fcc-servers', (req, res) => {
@@ -123,8 +120,8 @@ router.post('/api/config/fcc-servers', (req, res) => {
     settings.fccServers = list;
     res.json({ success: true });
 });
-router.get('/api/config/udpxy-servers', (req, res) => {
-    const cfg = readJson(CFG_UDPXY, { servers: [], currentId: '' });
+router.get('/api/config/udpxy-servers', async (req, res) => {
+    const cfg = await readJson(CFG_UDPXY, { servers: [], currentId: '' });
     res.json({ success: true, servers: Array.isArray(cfg.servers) ? cfg.servers : [], currentId: cfg.currentId || '' });
 });
 router.post('/api/config/udpxy-servers', (req, res) => {
@@ -133,8 +130,8 @@ router.post('/api/config/udpxy-servers', (req, res) => {
     writeJson(CFG_UDPXY, { servers: list, currentId: typeof currentId === 'string' ? currentId : '' });
     res.json({ success: true });
 });
-router.get('/api/config/group-titles', (req, res) => {
-    const cfg = readJson(CFG_GROUPS, { titles: settings.groupTitles });
+router.get('/api/config/group-titles', async (req, res) => {
+    const cfg = await readJson(CFG_GROUPS, { titles: settings.groupTitles });
     const raw = Array.isArray(cfg.titles) ? cfg.titles : [];
     const titlesObj = raw.map(x => {
         if (typeof x === 'string') return { name: x, color: '' };
@@ -157,8 +154,8 @@ router.post('/api/config/group-titles', (req, res) => {
     settings.groupTitles = listObj.map(x => x.name);
     res.json({ success: true });
 });
-router.get('/api/config/group-rules', (req, res) => {
-    const cfg = readJson(CFG_GROUP_RULES, { rules: [] });
+router.get('/api/config/group-rules', async (req, res) => {
+    const cfg = await readJson(CFG_GROUP_RULES, { rules: [] });
     const rules = Array.isArray(cfg.rules) ? cfg.rules : [];
     const normalized = rules.map(r => ({
         name: r && r.name ? r.name : '',
@@ -220,7 +217,7 @@ router.post('/api/settings/update', (req, res) => {
 });
 router.post('/api/settings/rename-group', (req, res) => {
     const { from, to } = req.body || {};
-    if (!from || !to) return res.status(400).json({ success: false, message: '缂哄皯鍒嗙bb缁勫鍚嶇О' });
+    if (!from || !to) return res.status(400).json({ success: false, message: '缺少分组名称' });
     let updated = 0;
     const streams = streamService.getStreams();
     const newStreams = streams.map(s => {
@@ -239,8 +236,8 @@ router.post('/api/settings/rename-group', (req, res) => {
 });
 
 // 浠ｇ悊鍒楄〃閰嶇疆
-router.get('/api/config/proxies', (req, res) => {
-    const cfg = readJson(CFG_PROXY, { list: settings.proxyList });
+router.get('/api/config/proxies', async (req, res) => {
+    const cfg = await readJson(CFG_PROXY, { list: settings.proxyList });
     res.json({ success: true, list: Array.isArray(cfg.list) ? cfg.list : [] });
 });
 router.post('/api/config/proxies', (req, res) => {
@@ -254,8 +251,8 @@ router.post('/api/config/proxies', (req, res) => {
     res.json({ success: true });
 });
 
-router.get('/api/config/app-settings', (req, res) => {
-    const cfg = readJson(CFG_APPSET, {
+router.get('/api/config/app-settings', async (req, res) => {
+    const cfg = await readJson(CFG_APPSET, {
         useInternal: settings.useInternal,
         useExternal: settings.useExternal,
         internalUrl: settings.internalUrl,
@@ -283,8 +280,8 @@ router.post('/api/config/app-settings', (req, res) => {
     });
     res.json({ success: true });
 });
-router.get('/api/config/epg-sources', (req, res) => {
-    const cfg = readJson(CFG_EPG, { sources: [] });
+router.get('/api/config/epg-sources', async (req, res) => {
+    const cfg = await readJson(CFG_EPG, { sources: [] });
     const list = Array.isArray(cfg.sources) ? cfg.sources : [];
     const normalized = list.map(x => ({
         id: x && x.id ? x.id : ('epg-' + require('crypto').randomUUID()),
@@ -300,7 +297,7 @@ router.post('/api/config/epg-sources', (req, res) => {
         id: x && x.id ? x.id : ('epg-' + Math.random().toString(36).slice(2) + Date.now().toString(36)),
         name: x && x.name ? x.name : '未命名EPG',
         url: x && x.url ? x.url : '',
-        scope: (x && x.scope === '澶栫綉EPG') ? '澶栫綉EPG' : '鍐呯綉EPG'
+        scope: (x && x.scope === '外网EPG') ? '外网EPG' : '内网EPG'
     })).filter(x => !!x.url) : [];
     writeJson(CFG_EPG, { sources: list });
     res.json({ success: true });
