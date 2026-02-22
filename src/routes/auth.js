@@ -4,10 +4,56 @@ const svgCaptcha = require('svg-captcha');
 const persistence = require('../services/persistenceService');
 const crypto = require('crypto');
 
-// 共享的 Session 存储 (暂时保留内存 Map)
+// 共享的 Session 存储 (内存 Map + 持久化到 data/sessions.json)
 const SESSIONS = new Map();
 const SESSION_TTL = 30 * 24 * 60 * 60 * 1000; // 缩短为 30 天
 const CAPTCHA_STORE = new Map();
+
+// 持久化配置
+const SESSIONS_FILE = 'sessions.json';
+let _sessionsSaveTimer = null;
+const SESSIONS_SAVE_DELAY = 1000; // ms, debounce 写入
+
+async function loadSessions() {
+    try {
+        const arr = await persistence.readJson(SESSIONS_FILE, []);
+        if (Array.isArray(arr)) {
+            arr.forEach(item => {
+                if (item && item.token) {
+                    SESSIONS.set(item.token, { username: item.username, expires: item.expires });
+                }
+            });
+        }
+    } catch (e) {
+        // ignore
+    }
+}
+
+function scheduleSaveSessions() {
+    if (_sessionsSaveTimer) clearTimeout(_sessionsSaveTimer);
+    _sessionsSaveTimer = setTimeout(async () => {
+        try {
+            const list = Array.from(SESSIONS.entries()).map(([token, v]) => ({ token, username: v.username, expires: v.expires }));
+            await persistence.writeJson(SESSIONS_FILE, list);
+        } catch (e) {
+            // ignore write errors
+        }
+    }, SESSIONS_SAVE_DELAY);
+}
+
+function setSession(token, sess) {
+    SESSIONS.set(token, sess);
+    scheduleSaveSessions();
+}
+
+function deleteSession(token) {
+    if (SESSIONS.has(token)) {
+        SESSIONS.delete(token);
+        scheduleSaveSessions();
+    }
+}
+
+(async () => { await loadSessions(); })();
 
 // --- 密码安全辅助函数 ---
 function hashPassword(password) {
@@ -72,7 +118,7 @@ router.post('/login', async (req, res) => {
         }
 
         const token = 'sess-' + crypto.randomUUID();
-        SESSIONS.set(token, { username, expires: Date.now() + SESSION_TTL });
+        setSession(token, { username, expires: Date.now() + SESSION_TTL });
         res.cookie('auth_token', token, { maxAge: SESSION_TTL, httpOnly: true, sameSite: 'strict' });
         return res.json({ success: true });
     }
@@ -85,7 +131,7 @@ router.post('/logout', (req, res) => {
     if (token) {
         const sess = SESSIONS.get(token);
         if (sess) console.log(`用户 ${sess.username} 退出登录`);
-        SESSIONS.delete(token);
+        deleteSession(token);
     }
     res.clearCookie('auth_token');
     res.json({ success: true });
@@ -97,7 +143,7 @@ router.get('/auth/check', (req, res) => {
     if (token && SESSIONS.has(token)) {
         const sess = SESSIONS.get(token);
         if (Date.now() > sess.expires) {
-            SESSIONS.delete(token);
+            deleteSession(token);
             res.clearCookie('auth_token');
             return res.json({ success: false });
         }
@@ -126,7 +172,10 @@ router.post('/auth/update', async (req, res) => {
 
     // 更新 session
     const sess = SESSIONS.get(token);
-    sess.username = user.username;
+    if (sess) {
+        sess.username = user.username;
+        setSession(token, sess);
+    }
 
     res.json({ success: true, username: user.username });
 });
@@ -137,7 +186,7 @@ router.isValidToken = (token) => {
     const sess = SESSIONS.get(token);
     if (!sess) return false;
     if (Date.now() > sess.expires) {
-        SESSIONS.delete(token);
+        deleteSession(token);
         return false;
     }
     return true;
