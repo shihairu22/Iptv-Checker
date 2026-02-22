@@ -23,7 +23,10 @@ const logger = {
 };
 
 // 中间件配置
-app.use(cors());
+app.use(cors({
+    origin: process.env.CORS_ORIGIN || 'http://localhost:8848',
+    credentials: true
+}));
 app.use(bodyParser.json());
 app.use(cookieParser());
 
@@ -148,7 +151,12 @@ async function startServer() {
         });
 
         // 初始化 Socket.IO
-        const io = socketIo(server, { cors: { origin: "*" } });
+        const io = socketIo(server, { 
+            cors: { 
+                origin: process.env.CORS_ORIGIN || 'http://localhost:8848',
+                credentials: true
+            }
+        });
         taskManager.setIo(io);
 
         io.on('connection', (socket) => {

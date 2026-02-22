@@ -119,6 +119,7 @@ router.post('/login', async (req, res) => {
 
         const token = 'sess-' + crypto.randomUUID();
         setSession(token, { username, expires: Date.now() + SESSION_TTL });
+        // 虽然持久化是异步的，但立即设置 cookie，防止会话丢失风险通过更频繁的心跳处理
         res.cookie('auth_token', token, { maxAge: SESSION_TTL, httpOnly: true, sameSite: 'strict' });
         return res.json({ success: true });
     }

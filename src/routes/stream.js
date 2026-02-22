@@ -34,7 +34,7 @@ router.post('/task/resume', (req, res) => {
 });
 
 // 单条检测
-router.post('/check-stream', (req, res) => {
+router.post('/check-stream', async (req, res) => {
     let { udpxyUrl, multicastUrl, name } = req.body;
     udpxyUrl = String(udpxyUrl || '').trim();
     multicastUrl = String(multicastUrl || '').trim();
@@ -43,7 +43,19 @@ router.post('/check-stream', (req, res) => {
         fullUrl = `${udpxyUrl}/rtp/${fullUrl.replace('rtp://', '')}`;
     }
 
-    ffprobeCheck(fullUrl, (data) => {
+    try {
+        // 使用 Promise 包装 ffprobeCheck 以支持 async/await
+        const data = await new Promise((resolve, reject) => {
+            const timeoutHandle = setTimeout(() => {
+                reject(new Error('检测超时 (20s)'));
+            }, 21000);
+
+            ffprobeCheck(fullUrl, (data) => {
+                clearTimeout(timeoutHandle);
+                resolve(data);
+            });
+        });
+
         const list = streamService.getStreams();
         const existingIndex = list.findIndex(item =>
             String(item.udpxyUrl || '').trim() === udpxyUrl &&
@@ -61,7 +73,10 @@ router.post('/check-stream', (req, res) => {
             });
         }
         res.json({ success: true, ...data });
-    });
+    } catch (error) {
+        console.error(`[Stream Check] Error for ${fullUrl}:`, error.message);
+        res.status(500).json({ success: false, message: error.message || '检测失败' });
+    }
 });
 
 // 删除单条
