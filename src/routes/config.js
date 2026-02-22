@@ -319,13 +319,20 @@ router.post('/api/config/app-settings', async (req, res) => {
         res.status(500).json({ success: false, message: '保存配置失败' });
     }
 });
-});
+
 router.get('/api/config/epg-sources', async (req, res) => {
     const cfg = await readJson(CFG_EPG, { sources: [] });
     const list = Array.isArray(cfg.sources) ? cfg.sources : [];
     const normalized = list.map(x => ({
         id: x && x.id ? x.id : ('epg-' + require('crypto').randomUUID()),
-        name: x && x.name ? x.name : '未async (req, res) => {
+        name: x && x.name ? x.name : '未命名EPG',
+        url: x && x.url ? x.url : '',
+        scope: (x && x.scope === '外网EPG') ? '外网EPG' : '内网EPG'
+    }));
+    res.json({ success: true, sources: normalized });
+});
+
+router.post('/api/config/epg-sources', async (req, res) => {
     const { sources } = req.body || {};
     const list = Array.isArray(sources) ? sources.map(x => ({
         id: x && x.id ? x.id : ('epg-' + Math.random().toString(36).slice(2) + Date.now().toString(36)),
@@ -337,17 +344,8 @@ router.get('/api/config/epg-sources', async (req, res) => {
         res.json({ success: true });
     } else {
         res.status(500).json({ success: false, message: '保存配置失败' });
-    }'epg-' + Math.random().toString(36).slice(2) + Date.now().toString(36)),
-        name: x && x.name ? x.name : '未命名EPG',
-        url: x && x.url ? x.url : '',
-        scope: (x && x.scope === '外网EPG') ? '外网EPG' : '内网EPG'
-    })).filter(x => !!x.url) : [];
-    writeJson(CFG_EPG, { sources: list });
-    res.json({ success: true });
+    }
 });
-
-
-
 
 
 module.exports = router;
