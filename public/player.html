@@ -1,138 +1,51 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
-
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>IPTV Checker-播放器</title>
-    <link rel="icon" type="image/png" href="/iptv.png">
-    <!-- 使用本地资源 -->
-    <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
-    <link href="/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
-    <style>
-        /* CSS 保持不变 (CGG888 版) */
-        html,
-        body {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            background: #000;
-            color: #fff;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-        }
-
-        :root {
-            --bg: #0b0d12;
-            --card: #141922;
-            --muted: #8a93a5
-        }
-
-        body {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            background: #000;
-            color: #fff;
-            display: flex;
-            height: 100vh;
-        }
-
-        #playerLayer {
-            position: relative;
-            flex: 1;
-            min-width: 0;
-            height: 100vh;
-            z-index: 0;
-            background: #000;
-        }
-
-        #app {
-            width: 100%;
-            height: 100%
-        }
-
-        /* 此处省略部分冗长的 CSS 定义以适配 Token 限制，但在真实代码中会完整保留 */
-    </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPTV 播放器</title>
+    <style>body,html{margin:0;padding:0;width:100%;height:100%;background-color:#000;overflow:hidden}#dplayer{width:100%;height:100%}</style>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.0/dist/hls.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dplayer@1.27.1/dist/DPlayer.min.js"></script>
 </head>
-
 <body>
-    <div id="playerLayer">
-        <div id="app"></div>
-        <!-- 头部与信息叠加层保持 CGG888 逻辑 -->
-    </div>
-
-    <script src="/vendor/hls.js/hls.min.js"></script>
-    <script src="/vendor/qier-player/index.min.js"></script>
+    <div id="dplayer"></div>
     <script>
-        // 安全拾取逻辑：引入 CSRF 防护与 XSS 过滤
-        (function () {
+        (function() {
             const urlParams = new URLSearchParams(window.location.search);
-            const rawUrl = urlParams.get('url') || '';
-            const title = urlParams.get('title') || 'IPTV 播放器';
-
-            // 简单的 XSS 过滤
-            function escapeHTML(str) {
-                if (!str) return '';
-                const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
-                return str.replace(/[&<>"']/g, m => map[m]);
-            }
-
-            document.title = escapeHTML(title);
-
-            if (!rawUrl) {
-                alert('请提供播放地址！');
-                return;
-            }
-
-            // 初始化播放器
-            const qierPlayer = new QierPlayer({
-                container: document.getElementById('app'),
-                videoProps: {
-                    autoplay: true,
-                    controls: true
-                },
-                options: {
-                    loadingOptions: { type: 'circle' }
+            const rawUrl = urlParams.get('url');
+            const title = urlParams.get('title') || 'IPTV 直播';
+            if (!rawUrl) { document.body.innerHTML = '<div style="color:white;text-align:center;padding-top:20%;font-size:24px;">无效的播放地址</div>'; return; }
+            document.title = title;
+            let type = 'auto';
+            if (rawUrl.includes('.m3u8') || rawUrl.includes('/hls')) type = 'hls';
+            else if (rawUrl.includes('.ts') || rawUrl.includes('/stream') || rawUrl.includes('mpegts')) type = 'flv';
+            console.log('播放:', rawUrl, type);
+            const dp = new DPlayer({
+                container: document.getElementById('dplayer'),
+                live: true, autoplay: true, screenshot: true,
+                video: {
+                    url: rawUrl, type: type,
+                    customType: {
+                        'flv': function (video, player) {
+                            if (mpegts.getFeatureList().mseLivePlayback) {
+                                const mpegtsPlayer = mpegts.createPlayer({ type: 'mpegts', isLive: true, url: video.src, enableStashBuffer: false, liveBufferLatencyChasing: true });
+                                mpegtsPlayer.attachMediaElement(video);
+                                mpegtsPlayer.load();
+                                player.events.on('destroy', () => mpegtsPlayer.destroy());
+                            }
+                        },
+                        'hls': function (video, player) {
+                             if (Hls.isSupported()) {
+                                const hls = new Hls(); hls.loadSource(video.src); hls.attachMedia(video);
+                                player.events.on('destroy', () => hls.destroy());
+                            } else if (video.canPlayType('application/vnd.apple.mpegurl')) { video.src = video.src; }
+                        }
+                    }
                 }
             });
-
-            const video = qierPlayer.video;
-            const csrfToken = localStorage.getItem('csrf_token') || '';
-
-            // HLS 逻辑
-            if (rawUrl.includes('/api/proxy/hls') || rawUrl.endsWith('.m3u8')) {
-                if (Hls.isSupported()) {
-                    const hls = new Hls({
-                        xhrSetup: function (xhr, url) {
-                            xhr.setRequestHeader('X-CSRF-Token', csrfToken);
-                        }
-                    });
-                    hls.loadSource(rawUrl);
-                    hls.attachMedia(video);
-                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                    video.src = rawUrl;
-                }
-            }
-            // MPEG-TS 逻辑 (处理 udpxy 等流)
-            else if (rawUrl.includes('/api/proxy/stream') || rawUrl.includes('/rtp/')) {
-                if (mpegts.getFeatureList().mseLivePlayback) {
-                    const player = mpegts.createPlayer({
-                        type: 'mse', // 或者 'mpegts'
-                        isLive: true,
-                        url: rawUrl
-                    });
-                    player.attachMediaElement(video);
-                    player.load();
-                    player.play();
-                } else {
-                    video.src = rawUrl;
-                }
-            } else {
-                video.src = rawUrl;
-            }
         })();
     </script>
 </body>
-
 </html>
