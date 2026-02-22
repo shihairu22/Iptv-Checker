@@ -85,6 +85,10 @@ document.addEventListener('DOMContentLoaded', function () {
 // --- Socket.IO 事件 ---
 socket.on('task:status', updateTaskUI);
 socket.on('task:progress', updateTaskUI);
+socket.on('connect_error', (err) => {
+    console.error('Socket 连接失败:', err);
+    // 可选：显示断开连接的 UI 提示
+});
 
 // 优化: 接收增量数据更新
 socket.on('task:update_data', (batch) => {

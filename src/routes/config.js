@@ -79,7 +79,7 @@ router.get('/api/config/logo-templates', async (req, res) => {
     const listStr = listObj.map(x => x.url);
     res.json({ success: true, templates: listStr, current: currUrl, templatesObj: listObj, currentId: currId });
 });
-router.post('/api/config/logo-templates', (req, res) => {
+router.post('/api/config/logo-templates', async (req, res) => {
     const { templates, current, templatesObj, currentId } = req.body || {};
     let listObj = Array.isArray(templatesObj) ? templatesObj.map(t => ({
         id: t && t.id ? t.id : ('ltpl-' + Math.random().toString(36).slice(2) + Date.now().toString(36)),
@@ -105,27 +105,37 @@ router.post('/api/config/logo-templates', (req, res) => {
     if (!currId && listObj[0]) currId = listObj[0].id;
     const currItem = listObj.find(x => x.id === currId) || listObj[0] || null;
     const currUrl = currItem ? currItem.url : '';
-    writeJson(CFG_LOGO, { templates: listObj, currentId: currId });
-    settings.logoTemplate = currUrl || settings.logoTemplate;
-    res.json({ success: true });
+    
+    if (await writeJson(CFG_LOGO, { templates: listObj, currentId: currId })) {
+        settings.logoTemplate = currUrl || settings.logoTemplate;
+        res.json({ success: true });
+    } else {
+        res.status(500).json({ success: false, message: '保存配置失败' });
+    }
 });
 router.get('/api/config/fcc-servers', async (req, res) => {
     const cfg = await readJson(CFG_FCC, { servers: settings.fccServers, currentId: '' });
     res.json({ success: true, servers: Array.isArray(cfg.servers) ? cfg.servers : [], currentId: cfg.currentId || '' });
 });
-router.post('/api/config/fcc-servers', (req, res) => {
+router.post('/api/config/fcc-servers', async (req, res) => {
     const { servers, currentId } = req.body || {};
     const list = Array.isArray(servers) ? servers : [];
-    writeJson(CFG_FCC, { servers: list, currentId: typeof currentId === 'string' ? currentId : '' });
-    settings.fccServers = list;
-    res.json({ success: true });
+    if (await writeJson(CFG_FCC, { servers: list, currentId: typeof currentId === 'string' ? currentId : '' })) {
+        settings.fccServers = list;
+        res.json({ success: true });
+    } else {
+        res.status(500).json({ success: false, message: '保存配置失败' });
+    }
 });
 router.get('/api/config/udpxy-servers', async (req, res) => {
-    const cfg = await readJson(CFG_UDPXY, { servers: [], currentId: '' });
-    res.json({ success: true, servers: Array.isArray(cfg.servers) ? cfg.servers : [], currentId: cfg.currentId || '' });
-});
-router.post('/api/config/udpxy-servers', (req, res) => {
+    const cfg = await readJson(CFG_UDPXY,async (req, res) => {
     const { servers, currentId } = req.body || {};
+    const list = Array.isArray(servers) ? servers : [];
+    if (await writeJson(CFG_UDPXY, { servers: list, currentId: typeof currentId === 'string' ? currentId : '' })) {
+        res.json({ success: true });
+    } else {
+        res.status(500).json({ success: false, message: '保存配置失败' });
+    } = req.body || {};
     const list = Array.isArray(servers) ? servers : [];
     writeJson(CFG_UDPXY, { servers: list, currentId: typeof currentId === 'string' ? currentId : '' });
     res.json({ success: true });
@@ -137,10 +147,7 @@ router.get('/api/config/group-titles', async (req, res) => {
         if (typeof x === 'string') return { name: x, color: '' };
         return { name: x && x.name ? x.name : '未命名分组', color: x && x.color ? x.color : '' };
     }).filter(x => x.name);
-    const titles = titlesObj.map(x => x.name);
-    res.json({ success: true, titles, titlesObj });
-});
-router.post('/api/config/group-titles', (req, res) => {
+    const titles = titlesObj.map(x => x.async (req, res) => {
     const { titles, titlesObj } = req.body || {};
     let listObj = Array.isArray(titlesObj) ? titlesObj.map(x => ({
         name: x && x.name ? x.name : '未命名分组',
@@ -150,6 +157,12 @@ router.post('/api/config/group-titles', (req, res) => {
         const names = Array.isArray(titles) ? titles : [];
         listObj = names.filter(n => typeof n === 'string' && n).map(n => ({ name: n, color: '' }));
     }
+    if (await writeJson(CFG_GROUPS, { titles: listObj })) {
+        settings.groupTitles = listObj.map(x => x.name);
+        res.json({ success: true });
+    } else {
+        res.status(500).json({ success: false, message: '保存配置失败' });
+    }
     writeJson(CFG_GROUPS, { titles: listObj });
     settings.groupTitles = listObj.map(x => x.name);
     res.json({ success: true });
@@ -157,18 +170,21 @@ router.post('/api/config/group-titles', (req, res) => {
 router.get('/api/config/group-rules', async (req, res) => {
     const cfg = await readJson(CFG_GROUP_RULES, { rules: [] });
     const rules = Array.isArray(cfg.rules) ? cfg.rules : [];
-    const normalized = rules.map(r => ({
-        name: r && r.name ? r.name : '',
-        matchers: Array.isArray(r && r.matchers) ? r.matchers : []
-    })).filter(x => x.name);
-    res.json({ success: true, rules: normalized });
-});
-router.post('/api/config/group-rules', (req, res) => {
+    const normalized = rules.map(r => (async (req, res) => {
     const { rules } = req.body || {};
     const list = Array.isArray(rules) ? rules.map(r => ({
         name: r && r.name ? r.name : '',
         matchers: Array.isArray(r && r.matchers) ? r.matchers.map(m => ({
             field: m && m.field ? m.field : 'name',
+            op: m && m.op ? m.op : 'contains',
+            value: m && m.value ? String(m.value) : ''
+        })).filter(m => m.value) : []
+    })).filter(x => x.name) : [];
+    if (await writeJson(CFG_GROUP_RULES, { rules: list })) {
+        res.json({ success: true });
+    } else {
+        res.status(500).json({ success: false, message: '保存配置失败' });
+    }? m.field : 'name',
             op: m && m.op ? m.op : 'contains',
             value: m && m.value ? String(m.value) : ''
         })).filter(m => m.value) : []
@@ -179,7 +195,7 @@ router.post('/api/config/group-rules', (req, res) => {
 router.get('/api/settings', (req, res) => {
     res.json({ success: true, settings });
 });
-router.post('/api/settings/update', (req, res) => {
+router.post('/api/settings/update', async (req, res) => {
     const { fccServers, logoTemplate, groupTitles, globalFcc: gf, externalUrl, internalUrl, useInternal, useExternal, securityToken, enableToken, proxyList } = req.body || {};
     if (Array.isArray(fccServers)) settings.fccServers = fccServers;
     if (typeof logoTemplate === 'string') settings.logoTemplate = logoTemplate;
@@ -190,8 +206,10 @@ router.post('/api/settings/update', (req, res) => {
     if (typeof useExternal === 'boolean') settings.useExternal = useExternal;
     if (typeof securityToken === 'string') settings.securityToken = securityToken;
     if (typeof enableToken === 'boolean') settings.enableToken = enableToken;
+    
+    let ok = true;
     if (typeof externalUrl === 'string' || typeof internalUrl === 'string' || typeof useInternal === 'boolean' || typeof useExternal === 'boolean' || typeof securityToken === 'string' || typeof enableToken === 'boolean') {
-        writeJson(CFG_APPSET, {
+        ok = await writeJson(CFG_APPSET, {
             useInternal: settings.useInternal,
             useExternal: settings.useExternal,
             internalUrl: settings.internalUrl,
@@ -200,22 +218,31 @@ router.post('/api/settings/update', (req, res) => {
             enableToken: settings.enableToken
         });
     }
+    
     if (Array.isArray(proxyList)) {
         settings.proxyList = proxyList.map(x => ({
             type: normalizeProxyType(x && x.type),
             url: x && x.url ? x.url.trim() : ''
         })).filter(x => !!x.url);
-        writeJson(CFG_PROXY, { list: settings.proxyList });
+        const ok2 = await writeJson(CFG_PROXY, { list: settings.proxyList });
+        ok = ok && ok2;
     }
+    
     if (typeof gf === 'string') {
         settings.globalFcc = gf;
         const val = gf.includes('=') ? gf : `fcc=${gf}`;
         // 更新内存中的流列表参数
         streamService.setStreams(streamService.getStreams().map(s => ({ ...s, httpParam: val })));
+        await streamService.save();
     }
-    res.json({ success: true, settings });
+    
+    if (ok) {
+        res.json({ success: true, settings });
+    } else {
+        res.status(500).json({ success: false, message: '部分配置保存失败' });
+    }
 });
-router.post('/api/settings/rename-group', (req, res) => {
+router.post('/api/settings/rename-group', async (req, res) => {
     const { from, to } = req.body || {};
     if (!from || !to) return res.status(400).json({ success: false, message: '缺少分组名称' });
     let updated = 0;
@@ -227,22 +254,31 @@ router.post('/api/settings/rename-group', (req, res) => {
         }
         return s;
     });
-    if (updated > 0) streamService.setStreams(newStreams);
+    if (updated > 0) {
+        streamService.setStreams(newStreams);
+        await streamService.save(); // 修复: 确保重命名后持久化
+    }
     if (Array.isArray(settings.groupTitles)) {
         const idx = settings.groupTitles.findIndex(g => g === from);
         if (idx !== -1) settings.groupTitles[idx] = to;
     }
+    // 同时也应该保存 group_titles.json
+    await writeJson(CFG_GROUPS, { titles: settings.groupTitles.map(g => ({ name: g, color: '' })) });
+
     res.json({ success: true, updated, groupTitles: settings.groupTitles });
 });
-
-// 浠ｇ悊鍒楄〃閰嶇疆
-router.get('/api/config/proxies', async (req, res) => {
-    const cfg = await readJson(CFG_PROXY, { list: settings.proxyList });
-    res.json({ success: true, list: Array.isArray(cfg.list) ? cfg.list : [] });
-});
-router.post('/api/config/proxies', (req, res) => {
+async (req, res) => {
     const { list } = req.body || {};
     const arr = Array.isArray(list) ? list.map(x => ({
+        type: normalizeProxyType(x && x.type),
+        url: x && x.url ? x.url.trim() : ''
+    })).filter(x => !!x.url) : [];
+    if (await writeJson(CFG_PROXY, { list: arr })) {
+        settings.proxyList = arr;
+        res.json({ success: true });
+    } else {
+        res.status(500).json({ success: false, message: '保存配置失败' });
+    }st) ? list.map(x => ({
         type: normalizeProxyType(x && x.type),
         url: x && x.url ? x.url.trim() : ''
     })).filter(x => !!x.url) : [];
@@ -259,10 +295,7 @@ router.get('/api/config/app-settings', async (req, res) => {
         externalUrl: settings.externalUrl,
         securityToken: settings.securityToken,
         enableToken: settings.enableToken
-    });
-    res.json({ success: true, appSettings: cfg });
-});
-router.post('/api/config/app-settings', (req, res) => {
+    });async (req, res) => {
     const { useInternal, useExternal, internalUrl, externalUrl, securityToken, enableToken } = req.body || {};
     if (typeof useInternal === 'boolean') settings.useInternal = useInternal;
     if (typeof useExternal === 'boolean') settings.useExternal = useExternal;
@@ -270,12 +303,18 @@ router.post('/api/config/app-settings', (req, res) => {
     if (typeof externalUrl === 'string') settings.externalUrl = externalUrl.trim();
     if (typeof securityToken === 'string') settings.securityToken = securityToken.trim();
     if (typeof enableToken === 'boolean') settings.enableToken = enableToken;
-    writeJson(CFG_APPSET, {
+    if (await writeJson(CFG_APPSET, {
         useInternal: settings.useInternal,
         useExternal: settings.useExternal,
         internalUrl: settings.internalUrl,
         externalUrl: settings.externalUrl,
         securityToken: settings.securityToken,
+        enableToken: settings.enableToken
+    })) {
+        res.json({ success: true });
+    } else {
+        res.status(500).json({ success: false, message: '保存配置失败' });
+    }securityToken,
         enableToken: settings.enableToken
     });
     res.json({ success: true });
@@ -285,16 +324,19 @@ router.get('/api/config/epg-sources', async (req, res) => {
     const list = Array.isArray(cfg.sources) ? cfg.sources : [];
     const normalized = list.map(x => ({
         id: x && x.id ? x.id : ('epg-' + require('crypto').randomUUID()),
-        name: x && x.name ? x.name : '未命名EPG',
-        url: x && x.url ? x.url : '',
-        scope: (x && (x.scope === '外网' || x.scope === '外网EPG')) ? '外网EPG' : '内网EPG'
-    })).filter(x => !!x.url);
-    res.json({ success: true, sources: normalized });
-});
-router.post('/api/config/epg-sources', (req, res) => {
+        name: x && x.name ? x.name : '未async (req, res) => {
     const { sources } = req.body || {};
     const list = Array.isArray(sources) ? sources.map(x => ({
         id: x && x.id ? x.id : ('epg-' + Math.random().toString(36).slice(2) + Date.now().toString(36)),
+        name: x && x.name ? x.name : '未命名EPG',
+        url: x && x.url ? x.url : '',
+        scope: (x && x.scope === '外网EPG') ? '外网EPG' : '内网EPG'
+    })).filter(x => !!x.url) : [];
+    if (await writeJson(CFG_EPG, { sources: list })) {
+        res.json({ success: true });
+    } else {
+        res.status(500).json({ success: false, message: '保存配置失败' });
+    }'epg-' + Math.random().toString(36).slice(2) + Date.now().toString(36)),
         name: x && x.name ? x.name : '未命名EPG',
         url: x && x.url ? x.url : '',
         scope: (x && x.scope === '外网EPG') ? '外网EPG' : '内网EPG'
