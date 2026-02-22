@@ -3,6 +3,7 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
 const cookieParser = require('cookie-parser');
+const axios = require('axios'); // Add this line
 const streamService = require('./services/streamService');
 const { requireAuth } = require('./middleware/auth');
 const authRouter = require('./routes/auth');
