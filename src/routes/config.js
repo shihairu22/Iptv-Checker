@@ -128,17 +128,17 @@ router.post('/api/config/fcc-servers', async (req, res) => {
     }
 });
 router.get('/api/config/udpxy-servers', async (req, res) => {
-    const cfg = await readJson(CFG_UDPXY,async (req, res) => {
+    const cfg = await readJson(CFG_UDPXY, { servers: [], currentId: '' });
+    res.json({ success: true, servers: Array.isArray(cfg.servers) ? cfg.servers : [], currentId: cfg.currentId || '' });
+});
+router.post('/api/config/udpxy-servers', async (req, res) => {
     const { servers, currentId } = req.body || {};
     const list = Array.isArray(servers) ? servers : [];
     if (await writeJson(CFG_UDPXY, { servers: list, currentId: typeof currentId === 'string' ? currentId : '' })) {
         res.json({ success: true });
     } else {
         res.status(500).json({ success: false, message: '保存配置失败' });
-    } = req.body || {};
-    const list = Array.isArray(servers) ? servers : [];
-    writeJson(CFG_UDPXY, { servers: list, currentId: typeof currentId === 'string' ? currentId : '' });
-    res.json({ success: true });
+    }
 });
 router.get('/api/config/group-titles', async (req, res) => {
     const cfg = await readJson(CFG_GROUPS, { titles: settings.groupTitles });
@@ -147,7 +147,10 @@ router.get('/api/config/group-titles', async (req, res) => {
         if (typeof x === 'string') return { name: x, color: '' };
         return { name: x && x.name ? x.name : '未命名分组', color: x && x.color ? x.color : '' };
     }).filter(x => x.name);
-    const titles = titlesObj.map(x => x.async (req, res) => {
+    const titles = titlesObj.map(x => x.name);
+    res.json({ success: true, titles, titlesObj });
+});
+router.post('/api/config/group-titles', async (req, res) => {
     const { titles, titlesObj } = req.body || {};
     let listObj = Array.isArray(titlesObj) ? titlesObj.map(x => ({
         name: x && x.name ? x.name : '未命名分组',
@@ -163,14 +166,17 @@ router.get('/api/config/group-titles', async (req, res) => {
     } else {
         res.status(500).json({ success: false, message: '保存配置失败' });
     }
-    writeJson(CFG_GROUPS, { titles: listObj });
-    settings.groupTitles = listObj.map(x => x.name);
-    res.json({ success: true });
 });
 router.get('/api/config/group-rules', async (req, res) => {
     const cfg = await readJson(CFG_GROUP_RULES, { rules: [] });
     const rules = Array.isArray(cfg.rules) ? cfg.rules : [];
-    const normalized = rules.map(r => (async (req, res) => {
+    const normalized = rules.map(r => ({
+        name: r && r.name ? r.name : '',
+        matchers: Array.isArray(r && r.matchers) ? r.matchers : []
+    })).filter(x => x.name);
+    res.json({ success: true, rules: normalized });
+});
+router.post('/api/config/group-rules', async (req, res) => {
     const { rules } = req.body || {};
     const list = Array.isArray(rules) ? rules.map(r => ({
         name: r && r.name ? r.name : '',
@@ -184,13 +190,7 @@ router.get('/api/config/group-rules', async (req, res) => {
         res.json({ success: true });
     } else {
         res.status(500).json({ success: false, message: '保存配置失败' });
-    }? m.field : 'name',
-            op: m && m.op ? m.op : 'contains',
-            value: m && m.value ? String(m.value) : ''
-        })).filter(m => m.value) : []
-    })).filter(x => x.name) : [];
-    writeJson(CFG_GROUP_RULES, { rules: list });
-    res.json({ success: true });
+    }
 });
 router.get('/api/settings', (req, res) => {
     res.json({ success: true, settings });
