@@ -267,7 +267,13 @@ router.post('/api/settings/rename-group', async (req, res) => {
 
     res.json({ success: true, updated, groupTitles: settings.groupTitles });
 });
-async (req, res) => {
+
+// 代理列表配置
+router.get('/api/config/proxies', async (req, res) => {
+    const cfg = await readJson(CFG_PROXY, { list: settings.proxyList });
+    res.json({ success: true, list: Array.isArray(cfg.list) ? cfg.list : [] });
+});
+router.post('/api/config/proxies', async (req, res) => {
     const { list } = req.body || {};
     const arr = Array.isArray(list) ? list.map(x => ({
         type: normalizeProxyType(x && x.type),
@@ -278,13 +284,7 @@ async (req, res) => {
         res.json({ success: true });
     } else {
         res.status(500).json({ success: false, message: '保存配置失败' });
-    }st) ? list.map(x => ({
-        type: normalizeProxyType(x && x.type),
-        url: x && x.url ? x.url.trim() : ''
-    })).filter(x => !!x.url) : [];
-    writeJson(CFG_PROXY, { list: arr });
-    settings.proxyList = arr;
-    res.json({ success: true });
+    }
 });
 
 router.get('/api/config/app-settings', async (req, res) => {
@@ -295,7 +295,10 @@ router.get('/api/config/app-settings', async (req, res) => {
         externalUrl: settings.externalUrl,
         securityToken: settings.securityToken,
         enableToken: settings.enableToken
-    });async (req, res) => {
+    });
+    res.json({ success: true, appSettings: cfg });
+});
+router.post('/api/config/app-settings', async (req, res) => {
     const { useInternal, useExternal, internalUrl, externalUrl, securityToken, enableToken } = req.body || {};
     if (typeof useInternal === 'boolean') settings.useInternal = useInternal;
     if (typeof useExternal === 'boolean') settings.useExternal = useExternal;
@@ -314,10 +317,8 @@ router.get('/api/config/app-settings', async (req, res) => {
         res.json({ success: true });
     } else {
         res.status(500).json({ success: false, message: '保存配置失败' });
-    }securityToken,
-        enableToken: settings.enableToken
-    });
-    res.json({ success: true });
+    }
+});
 });
 router.get('/api/config/epg-sources', async (req, res) => {
     const cfg = await readJson(CFG_EPG, { sources: [] });
