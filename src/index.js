@@ -73,6 +73,7 @@ async function startServer() {
         app.use('/css', express.static(path.join(publicDir, 'css')));
         app.use('/js', express.static(path.join(publicDir, 'js')));
         app.use('/login.html', express.static(path.join(publicDir, 'login.html')));
+        app.use('/player.html', express.static(path.join(publicDir, 'player.html')));
 
         // 2. 鉴权路由 (登录、验证码)
         app.use('/api', authRouter);
