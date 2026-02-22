@@ -80,6 +80,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // 6. 初始化范围检测预览
     updateRangeSummary();
+
+    // 7. 检查 udpxy 配置状态
+    const udpxyServers = getUdpxyServers();
+    if (udpxyServers.length === 0) {
+        // 提示用户配置 udpxy 服务器
+        setTimeout(() => {
+            showCenterConfirm(
+                '⚠️ 未检测到 UDPXY 服务器配置\n\n请在左侧"UDPXY 服务器"区域添加您的 udpxy 地址。\n\n例如: http://10.0.0.1:5140',
+                null,
+                true
+            );
+        }, 500);
+    }
 });
 
 // --- Socket.IO 事件 ---
@@ -571,16 +584,15 @@ function getUdpxyServers() {
         let list = raw ? JSON.parse(raw) : [];
         if (!Array.isArray(list)) list = [];
         if (list.length === 0) {
-            list = [{ id: String(Date.now()), name: '默认服务器', url: 'http://192.168.88.1:8333' }];
+            // 不设置默认值，让用户明确配置
             localStorage.setItem(UDPS_KEY, JSON.stringify(list));
-            localStorage.setItem(UDP_CURR_KEY, list[0].id);
+            localStorage.removeItem(UDP_CURR_KEY);
         }
         return list;
     } catch (e) {
-        const list = [{ id: String(Date.now()), name: '默认服务器', url: 'http://192.168.88.1:8333' }];
-        localStorage.setItem(UDPS_KEY, JSON.stringify(list));
-        localStorage.setItem(UDP_CURR_KEY, list[0].id);
-        return list;
+        localStorage.removeItem(UDPS_KEY);
+        localStorage.removeItem(UDP_CURR_KEY);
+        return [];
     }
 }
 function saveUdpxyServers(list) { localStorage.setItem(UDPS_KEY, JSON.stringify(list)); }
@@ -588,6 +600,7 @@ function getCurrentUdpxyId() { return localStorage.getItem(UDP_CURR_KEY); }
 function setCurrentUdpxyId(id) { localStorage.setItem(UDP_CURR_KEY, id); }
 function getCurrentUdpxyUrl() {
     const list = getUdpxyServers();
+    if (list.length === 0) return ''; // 返回空，没有配置的 udpxy
     const curr = getCurrentUdpxyId();
     const found = list.find(s => s.id === curr) || list[0];
     return found ? found.url : '';
@@ -615,25 +628,76 @@ function addUdpxy(name, url) {
         return;
     }
     if (!name) name = '未命名服务器';
-    const list = getUdpxyServers();
-    const id = String(Date.now());
-    list.push({ id, name, url });
-    saveUdpxyServers(list);
-    setCurrentUdpxyId(id);
-    renderUdpxySelect();
-    syncUdpxyServersBackend();
+    
+    // 测试服务器可用性
+    (async () => {
+        try {
+            const testUrl = url.endsWith('/') ? url + 'status' : url + '/status';
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            
+            try {
+                const response = await fetch(testUrl, { 
+                    method: 'GET', 
+                    signal: controller.signal,
+                    mode: 'no-cors'
+                });
+                clearTimeout(timeoutId);
+                
+                const list = getUdpxyServers();
+                const id = String(Date.now());
+                list.push({ id, name, url });
+                saveUdpxyServers(list);
+                setCurrentUdpxyId(id);
+                renderUdpxySelect();
+                syncUdpxyServersBackend();
+                
+                showCenterConfirm(`✓ 服务器 "${name}" 已添加\n地址: ${url}`, null, false);
+            } catch (timeoutErr) {
+                clearTimeout(timeoutId);
+                // 超时时，仍然允许添加但提示用户
+                const list = getUdpxyServers();
+                const id = String(Date.now());
+                list.push({ id, name, url });
+                saveUdpxyServers(list);
+                setCurrentUdpxyId(id);
+                renderUdpxySelect();
+                syncUdpxyServersBackend();
+                
+                showCenterConfirm(`⚠️ 服务器响应超时或离线\n地址: ${url}\n已保存配置，请检查网络连接`, null, true);
+            }
+        } catch (e) {
+            // 其他错误，仍然允许添加
+            const list = getUdpxyServers();
+            const id = String(Date.now());
+            list.push({ id, name, url });
+            saveUdpxyServers(list);
+            setCurrentUdpxyId(id);
+            renderUdpxySelect();
+            syncUdpxyServersBackend();
+            
+            showCenterConfirm(`⚠️ 无法验证服务器（网络可能受限）\n地址: ${url}`, null, true);
+        }
+    })();
 }
 function deleteCurrentUdpxy() {
     const list = getUdpxyServers();
-    if (list.length <= 1) {
-        showCenterConfirm('至少保留一个服务器', null, true);
+    if (list.length === 0) {
+        showCenterConfirm('当前没有配置任何 UDPXY 服务器', null, true);
         return;
     }
     const curr = getCurrentUdpxyId();
     const idx = list.findIndex(s => s.id === curr);
     if (idx >= 0) list.splice(idx, 1);
     saveUdpxyServers(list);
-    setCurrentUdpxyId(list[0].id);
+    
+    if (list.length > 0) {
+        setCurrentUdpxyId(list[0].id);
+    } else {
+        localStorage.removeItem(UDP_CURR_KEY);
+        showCenterConfirm('⚠️ 已删除最后一个 UDPXY 服务器\n请添加新的 UDPXY 服务器地址以继续使用', null, true);
+    }
+    
     renderUdpxySelect();
     syncUdpxyServersBackend();
 }
