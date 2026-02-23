@@ -127,6 +127,53 @@ function normalizeEpgSourceForWrite(item) {
         scope: (item && item.scope === '外网EPG') ? '外网EPG' : '内网EPG'
     };
 }
+
+function applyAppSettingsPatch(payload) {
+    const { useInternal, useExternal, internalUrl, externalUrl, securityToken, enableToken } = payload || {};
+    let changed = false;
+
+    if (typeof useInternal === 'boolean') {
+        settings.useInternal = useInternal;
+        changed = true;
+    }
+    if (typeof useExternal === 'boolean') {
+        settings.useExternal = useExternal;
+        changed = true;
+    }
+    if (typeof internalUrl === 'string') {
+        settings.internalUrl = cleanUrl(internalUrl);
+        changed = true;
+    }
+    if (typeof externalUrl === 'string') {
+        settings.externalUrl = cleanUrl(externalUrl);
+        changed = true;
+    }
+    if (typeof securityToken === 'string') {
+        settings.securityToken = cleanText(securityToken, 256);
+        changed = true;
+    }
+    if (typeof enableToken === 'boolean') {
+        settings.enableToken = enableToken;
+        changed = true;
+    }
+
+    return changed;
+}
+
+function getCurrentAppSettingsPayload() {
+    return {
+        useInternal: settings.useInternal,
+        useExternal: settings.useExternal,
+        internalUrl: settings.internalUrl,
+        externalUrl: settings.externalUrl,
+        securityToken: settings.securityToken,
+        enableToken: settings.enableToken
+    };
+}
+
+async function saveCurrentAppSettings() {
+    return await writeJson(CFG_APPSET, getCurrentAppSettingsPayload());
+}
 // 使用 getter 确保始终获取最新的 settings 对象
 // （streamService.init() 会用展开运算符重建 settings 对象，直接引用会失效）
 const settings = new Proxy({}, {
@@ -253,23 +300,11 @@ router.post('/api/settings/update', async (req, res) => {
     if (Array.isArray(fccServers)) settings.fccServers = fccServers;
     if (typeof logoTemplate === 'string') settings.logoTemplate = cleanUrl(logoTemplate);
     if (Array.isArray(groupTitles)) settings.groupTitles = groupTitles;
-    if (typeof externalUrl === 'string') settings.externalUrl = cleanUrl(externalUrl);
-    if (typeof internalUrl === 'string') settings.internalUrl = cleanUrl(internalUrl);
-    if (typeof useInternal === 'boolean') settings.useInternal = useInternal;
-    if (typeof useExternal === 'boolean') settings.useExternal = useExternal;
-    if (typeof securityToken === 'string') settings.securityToken = cleanText(securityToken, 256);
-    if (typeof enableToken === 'boolean') settings.enableToken = enableToken;
+    const appSettingsChanged = applyAppSettingsPatch({ externalUrl, internalUrl, useInternal, useExternal, securityToken, enableToken });
 
     let ok = true;
-    if (typeof externalUrl === 'string' || typeof internalUrl === 'string' || typeof useInternal === 'boolean' || typeof useExternal === 'boolean' || typeof securityToken === 'string' || typeof enableToken === 'boolean') {
-        ok = await writeJson(CFG_APPSET, {
-            useInternal: settings.useInternal,
-            useExternal: settings.useExternal,
-            internalUrl: settings.internalUrl,
-            externalUrl: settings.externalUrl,
-            securityToken: settings.securityToken,
-            enableToken: settings.enableToken
-        });
+    if (appSettingsChanged) {
+        ok = await saveCurrentAppSettings();
     }
 
     if (Array.isArray(proxyList)) {
@@ -339,32 +374,12 @@ router.post('/api/config/proxies', async (req, res) => {
 });
 
 router.get('/api/config/app-settings', async (req, res) => {
-    const cfg = await readJson(CFG_APPSET, {
-        useInternal: settings.useInternal,
-        useExternal: settings.useExternal,
-        internalUrl: settings.internalUrl,
-        externalUrl: settings.externalUrl,
-        securityToken: settings.securityToken,
-        enableToken: settings.enableToken
-    });
+    const cfg = await readJson(CFG_APPSET, getCurrentAppSettingsPayload());
     res.json({ success: true, appSettings: cfg });
 });
 router.post('/api/config/app-settings', async (req, res) => {
-    const { useInternal, useExternal, internalUrl, externalUrl, securityToken, enableToken } = req.body || {};
-    if (typeof useInternal === 'boolean') settings.useInternal = useInternal;
-    if (typeof useExternal === 'boolean') settings.useExternal = useExternal;
-    if (typeof internalUrl === 'string') settings.internalUrl = cleanUrl(internalUrl);
-    if (typeof externalUrl === 'string') settings.externalUrl = cleanUrl(externalUrl);
-    if (typeof securityToken === 'string') settings.securityToken = cleanText(securityToken, 256);
-    if (typeof enableToken === 'boolean') settings.enableToken = enableToken;
-    if (await writeJson(CFG_APPSET, {
-        useInternal: settings.useInternal,
-        useExternal: settings.useExternal,
-        internalUrl: settings.internalUrl,
-        externalUrl: settings.externalUrl,
-        securityToken: settings.securityToken,
-        enableToken: settings.enableToken
-    })) {
+    applyAppSettingsPatch(req.body || {});
+    if (await saveCurrentAppSettings()) {
         res.json({ success: true });
     } else {
         res.status(500).json({ success: false, message: '保存配置失败' });
