@@ -87,8 +87,7 @@ async function loadUsers() {
     }
 
     const presetPassword = typeof process.env.IPTV_ADMIN_PASSWORD === 'string' ? process.env.IPTV_ADMIN_PASSWORD.trim() : '';
-    const generatedPassword = crypto.randomBytes(8).toString('hex');
-    const initialPassword = presetPassword || generatedPassword;
+    const initialPassword = presetPassword || 'admin';
 
     const user = { username: 'admin', password: hashPassword(initialPassword) };
     const saved = await persistence.writeJson('users.json', user);
@@ -96,7 +95,7 @@ async function loadUsers() {
         if (presetPassword) {
             console.warn('[Auth] users.json 不存在，已使用环境变量 IPTV_ADMIN_PASSWORD 初始化管理员密码。');
         } else {
-            console.warn(`[Auth] users.json 不存在，已自动初始化管理员账号。初始密码: ${initialPassword}`);
+            console.warn('[Auth] users.json 不存在，已自动初始化管理员账号。默认密码: admin');
             console.warn('[Auth] 请立即登录并在设置中修改密码。');
         }
     } else {
