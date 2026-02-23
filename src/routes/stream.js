@@ -105,12 +105,16 @@ router.post('/check-stream', async (req, res) => {
 });
 
 // 删除单条
-router.delete('/stream/:index', (req, res) => {
+router.delete('/stream/:index', async (req, res) => {
     const idx = parseInt(req.params.index, 10);
-    if (streamService.deleteStream(idx)) {
+    if (Number.isNaN(idx) || idx < 0 || idx >= streamService.getStreams().length) {
+        return res.json({ success: false, message: '删除失败，索引无效' });
+    }
+    const ok = await streamService.deleteStream(idx);
+    if (ok) {
         res.json({ success: true });
     } else {
-        res.json({ success: false, message: '删除失败，索引无效' });
+        res.status(500).json({ success: false, message: '删除失败，保存异常' });
     }
 });
 

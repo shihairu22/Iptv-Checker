@@ -104,11 +104,10 @@ class StreamService {
         this.settings = { ...this.settings, ...newSettings };
     }
 
-    deleteStream(idx) {
+    async deleteStream(idx) {
         if (idx >= 0 && idx < this.multicastList.length) {
             this.multicastList.splice(idx, 1);
-            this.save();
-            return true;
+            return await this.save();
         }
         return false;
     }

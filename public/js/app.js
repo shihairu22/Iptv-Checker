@@ -140,20 +140,12 @@ function updateTaskUI(task) {
         }
 
 
-        if (!task.running && !task.paused && task.finished === task.total) {
+    } else {
+        if (task.finished > 0 && task.finished === task.total) {
             showProgress(task.total, task.total, `检测完成 | 总数: ${task.total} 在线: ${task.success} 离线: ${task.fail}`);
             getStreams();
-
-            // 恢复按钮
-            const startBtn = document.getElementById('startDetectBtn');
-            if (startBtn) {
-                startBtn.innerHTML = '<i class="bi bi-play-circle-fill me-1"></i> 开始检测';
-                startBtn.classList.remove('btn-warning');
-                startBtn.classList.add('btn-success');
-            }
-            isTaskPaused = false;
         }
-    } else {
+
         // 任务未运行
         isTaskPaused = false;
         const startBtn = document.getElementById('startDetectBtn');
@@ -445,7 +437,11 @@ function updateStatsAndDisplay() {
 
 function renderStreamsList(arr) {
     const e = typeof escapeHTML === 'function' ? escapeHTML : (s => s);
-    const render = arr => arr.map(({ stream, index }) => `
+    const render = arr => arr.map(({ stream, index }) => {
+        const playUrl = `${stream.udpxyUrl || ''}/rtp/${(stream.multicastUrl || '').replace('rtp://', '')}${stream.httpParam ? ('?' + stream.httpParam) : ''}`;
+        const encodedPlayUrl = encodeURIComponent(playUrl);
+        const encodedTitle = encodeURIComponent(stream.name || '');
+        return `
 <div class="stream-item d-flex align-items-center ${stream.isAvailable ? 'available' : 'unavailable'} p-3 mb-2 rounded border bg-white shadow-sm position-relative overflow-hidden">
     <div class="d-flex align-items-center flex-grow-1 gap-3 flex-wrap">
         <div class="form-check mb-0">
@@ -476,19 +472,20 @@ function renderStreamsList(arr) {
 
     <div class="d-flex gap-2 ms-auto align-self-center">
         <div class="btn-group btn-group-sm">
-            <button class="btn btn-outline-success" onclick="openWebPlayer('${e(stream.udpxyUrl || '')}/rtp/${e((stream.multicastUrl || '').replace('rtp://', ''))}${stream.httpParam ? ('?' + e(stream.httpParam)) : ''}', '${e(stream.name || '')}')" title="内置播放">
+            <button class="btn btn-outline-success btn-play-web" data-play-url="${encodedPlayUrl}" data-play-title="${encodedTitle}" title="内置播放">
                 <i class="bi bi-play-btn"></i> <span class="d-none d-md-inline">内置播放</span>
             </button>
-            <button class="btn btn-outline-success" onclick="openPotPlayer('${e(stream.udpxyUrl || '')}/rtp/${e((stream.multicastUrl || '').replace('rtp://', ''))}${stream.httpParam ? ('?' + e(stream.httpParam)) : ''}')" title="外部播放">
+            <button class="btn btn-outline-success btn-play-pot" data-play-url="${encodedPlayUrl}" title="外部播放">
                 <i class="bi bi-play-fill"></i>
             </button>
         </div>
-        <button class="btn btn-sm btn-outline-danger" onclick="deleteStream(${index})" title="删除">
+        <button class="btn btn-sm btn-outline-danger btn-delete-stream" data-delete-index="${index}" title="删除">
             <i class="bi bi-trash"></i> <span class="d-none d-md-inline">删除</span>
         </button>
     </div>
 </div>
-`).join('');
+`;
+    }).join('');
 
     const sl = document.getElementById('streams-list');
     if (sl) sl.innerHTML = render(arr);
@@ -536,6 +533,33 @@ function bindListEvents() {
         b.onchange = function () {
             const i = Number(this.dataset.index);
             if (this.checked) selectedSet.add(i); else selectedSet.delete(i);
+        };
+    });
+
+    const webPlayBtns = Array.from(document.querySelectorAll('.btn-play-web'));
+    webPlayBtns.forEach(btn => {
+        btn.onclick = function () {
+            const playUrl = decodeURIComponent(this.dataset.playUrl || '');
+            const title = decodeURIComponent(this.dataset.playTitle || '');
+            openWebPlayer(playUrl, title);
+        };
+    });
+
+    const potPlayBtns = Array.from(document.querySelectorAll('.btn-play-pot'));
+    potPlayBtns.forEach(btn => {
+        btn.onclick = function () {
+            const playUrl = decodeURIComponent(this.dataset.playUrl || '');
+            openPotPlayer(playUrl);
+        };
+    });
+
+    const deleteBtns = Array.from(document.querySelectorAll('.btn-delete-stream'));
+    deleteBtns.forEach(btn => {
+        btn.onclick = function () {
+            const index = Number(this.dataset.deleteIndex);
+            if (!Number.isNaN(index)) {
+                deleteStream(index);
+            }
         };
     });
 }
