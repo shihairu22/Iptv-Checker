@@ -577,13 +577,13 @@ function getUdpxyServers() {
         let list = raw ? JSON.parse(raw) : [];
         if (!Array.isArray(list)) list = [];
         if (list.length === 0) {
-            list = [{ id: String(Date.now()), name: '默认服务器', url: 'http://192.168.88.1:8333' }];
+            list = [{ id: String(Date.now()), name: '默认服务器', url: 'http://10.0.0.1:5140' }];
             localStorage.setItem(UDPS_KEY, JSON.stringify(list));
             localStorage.setItem(UDP_CURR_KEY, list[0].id);
         }
         return list;
     } catch (e) {
-        const list = [{ id: String(Date.now()), name: '默认服务器', url: 'http://192.168.88.1:8333' }];
+        const list = [{ id: String(Date.now()), name: '默认服务器', url: 'http://10.0.0.1:5140' }];
         localStorage.setItem(UDPS_KEY, JSON.stringify(list));
         localStorage.setItem(UDP_CURR_KEY, list[0].id);
         return list;
