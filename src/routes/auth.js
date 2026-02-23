@@ -112,6 +112,10 @@ router.post('/login', async (req, res) => {
     const stored = CAPTCHA_STORE.get(captchaId);
     CAPTCHA_STORE.delete(captchaId);
 
+    if (Date.now() > stored.expires) {
+        return res.json({ success: false, message: '验证码已过期，请刷新重试' });
+    }
+
     if (!captcha || captcha.toLowerCase() !== stored.text) {
         return res.json({ success: false, message: '验证码错误' });
     }

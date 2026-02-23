@@ -89,13 +89,31 @@ async function startServer() {
 
         // 5. 流媒体代理模块 (GET 请求，不受 CSRF 影响)
         // URL 安全校验：仅允许 http/https，屏蔽本地回环和链路本地地址
+        function isPrivateIp(host) {
+            // IPv4 loopback and link-local
+            if (host === 'localhost' || host === '127.0.0.1') return true;
+            if (host.startsWith('169.254.')) return true;
+            // Private IPv4 ranges: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+            const parts = host.split('.').map(Number);
+            if (parts.length === 4 && parts.every(n => !isNaN(n) && n >= 0 && n <= 255)) {
+                if (parts[0] === 10) return true;
+                if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+                if (parts[0] === 192 && parts[1] === 168) return true;
+                if (parts[0] === 0) return true;
+            }
+            // IPv6 loopback, link-local (fe80::/10), unique-local (fc00::/7)
+            if (host === '::1') return true;
+            const lowerHost = host.replace(/^\[|\]$/g, '').toLowerCase();
+            if (lowerHost.startsWith('fe80:') || lowerHost.startsWith('fc') || lowerHost.startsWith('fd')) return true;
+            return false;
+        }
+
         function isUrlSafe(urlStr) {
             try {
                 const u = new URL(urlStr);
                 if (!['http:', 'https:'].includes(u.protocol)) return false;
                 const host = u.hostname;
-                if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return false;
-                if (host.startsWith('169.254.')) return false;
+                if (isPrivateIp(host)) return false;
                 return true;
             } catch (e) {
                 return false;
