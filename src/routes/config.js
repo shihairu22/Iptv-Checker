@@ -1,6 +1,5 @@
 const express = require('express');
 const router = express.Router();
-const path = require('path');
 const crypto = require('crypto');
 const persistence = require('../services/persistenceService');
 const streamService = require('../services/streamService');
@@ -23,6 +22,15 @@ async function writeJson(file, obj) {
     return await persistence.writeJson(file, obj);
 }
 
+function cleanText(value, maxLen = 256) {
+    if (typeof value !== 'string') return '';
+    return value.trim().slice(0, maxLen);
+}
+
+function cleanUrl(value, maxLen = 2048) {
+    return cleanText(value, maxLen);
+}
+
 function normalizeProxyType(t) {
     const v = String(t || '').trim();
     if (v === '代理' || v === '单播代理') return '单播代理';
@@ -33,6 +41,92 @@ function normalizeProxyType(t) {
     return '组播代理';
 }
 
+function createTempId(prefix) {
+    return `${prefix}-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+}
+
+function normalizeLogoCategory(category, mapLegacy) {
+    if (typeof category !== 'string') return '内网台标';
+    if (!mapLegacy) return category;
+    if (category === '内网') return '内网台标';
+    if (category === '外网') return '外网台标';
+    return category;
+}
+
+function normalizeLogoTemplateForRead(item) {
+    if (typeof item === 'string') {
+        return { id: 'ltpl-' + crypto.randomUUID(), name: '未命名模板', url: item, category: '内网台标' };
+    }
+    return {
+        id: item && item.id ? item.id : ('ltpl-' + crypto.randomUUID()),
+        name: item && item.name ? item.name : '未命名模板',
+        url: item && item.url ? item.url : '',
+        category: normalizeLogoCategory(item && item.category, true)
+    };
+}
+
+function normalizeLogoTemplateForWrite(item) {
+    const fixedId = cleanText(item && item.id, 96);
+    return {
+        id: fixedId || createTempId('ltpl'),
+        name: cleanText(item && item.name, 128) || '未命名模板',
+        url: cleanUrl(item && item.url),
+        category: normalizeLogoCategory(item && item.category, false)
+    };
+}
+
+function resolveCurrentItem(listObj, currentId, currentUrl, fallbackUrl) {
+    let resolvedId = typeof currentId === 'string' ? currentId : '';
+    if (!resolvedId && typeof currentUrl === 'string') {
+        const matched = listObj.find(x => x.url === currentUrl);
+        resolvedId = matched ? matched.id : '';
+    }
+    if (!resolvedId && listObj[0]) resolvedId = listObj[0].id;
+    const item = listObj.find(x => x.id === resolvedId) || listObj[0] || null;
+    return {
+        currentId: resolvedId,
+        currentItem: item,
+        currentUrl: item ? item.url : fallbackUrl
+    };
+}
+
+function normalizeGroupTitleForRead(item) {
+    if (typeof item === 'string') return { name: item, color: '' };
+    return { name: item && item.name ? item.name : '未命名分组', color: item && item.color ? item.color : '' };
+}
+
+function normalizeGroupTitleForWrite(item) {
+    return {
+        name: cleanText(item && item.name, 64) || '未命名分组',
+        color: cleanText(item && item.color, 32)
+    };
+}
+
+function normalizeProxyList(list) {
+    return Array.isArray(list) ? list.map(x => ({
+        type: normalizeProxyType(x && x.type),
+        url: cleanUrl(x && x.url)
+    })).filter(x => !!x.url) : [];
+}
+
+function normalizeEpgSourceForRead(item) {
+    return {
+        id: item && item.id ? item.id : ('epg-' + crypto.randomUUID()),
+        name: item && item.name ? item.name : '未命名EPG',
+        url: item && item.url ? item.url : '',
+        scope: (item && item.scope === '外网EPG') ? '外网EPG' : '内网EPG'
+    };
+}
+
+function normalizeEpgSourceForWrite(item) {
+    const fixedId = cleanText(item && item.id, 96);
+    return {
+        id: fixedId || createTempId('epg'),
+        name: cleanText(item && item.name, 128) || '未命名EPG',
+        url: cleanUrl(item && item.url),
+        scope: (item && item.scope === '外网EPG') ? '外网EPG' : '内网EPG'
+    };
+}
 // 使用 getter 确保始终获取最新的 settings 对象
 // （streamService.init() 会用展开运算符重建 settings 对象，直接引用会失效）
 const settings = new Proxy({}, {
@@ -51,53 +145,28 @@ router.get('/api/config/logo-templates', async (req, res) => {
     const defId = 'ltpl-default';
     const cfg = await readJson(CFG_LOGO, { templates: [{ id: defId, name: '默认模板', url: settings.logoTemplate }], currentId: defId });
     const listRaw = Array.isArray(cfg.templates) ? cfg.templates : [];
-    const listObj = listRaw.map(t => {
-        if (typeof t === 'string') {
-            return { id: 'ltpl-' + crypto.randomUUID(), name: '未命名模板', url: t, category: '内网台标' };
-        }
-        return { id: t.id || ('ltpl-' + crypto.randomUUID()), name: t.name || '未命名模板', url: t.url || '', category: typeof t.category === 'string' ? (t.category === '内网' ? '内网台标' : (t.category === '外网' ? '外网台标' : t.category)) : '内网台标' };
-    }).filter(x => x.url);
-    let currId = typeof cfg.currentId === 'string' ? cfg.currentId : '';
-    let currUrl = '';
-    if (!currId && typeof cfg.current === 'string') {
-        const it = listObj.find(x => x.url === cfg.current);
-        currId = it ? it.id : '';
-    }
-    if (!currId && listObj[0]) currId = listObj[0].id;
-    const currItem = listObj.find(x => x.id === currId) || listObj[0] || null;
-    currUrl = currItem ? currItem.url : settings.logoTemplate;
+    const listObj = listRaw.map(normalizeLogoTemplateForRead).filter(x => x.url);
+    const current = resolveCurrentItem(listObj, cfg.currentId, cfg.current, settings.logoTemplate);
     const listStr = listObj.map(x => x.url);
-    res.json({ success: true, templates: listStr, current: currUrl, templatesObj: listObj, currentId: currId });
+    res.json({ success: true, templates: listStr, current: current.currentUrl, templatesObj: listObj, currentId: current.currentId });
 });
 router.post('/api/config/logo-templates', async (req, res) => {
     const { templates, current, templatesObj, currentId } = req.body || {};
-    let listObj = Array.isArray(templatesObj) ? templatesObj.map(t => ({
-        id: t && t.id ? t.id : ('ltpl-' + Math.random().toString(36).slice(2) + Date.now().toString(36)),
-        name: t && t.name ? t.name : '未命名模板',
-        url: t && t.url ? t.url : '',
-        category: t && typeof t.category === 'string' ? t.category : '内网台标'
-    })) : [];
+    let listObj = Array.isArray(templatesObj) ? templatesObj.map(normalizeLogoTemplateForWrite) : [];
     if (listObj.length === 0) {
         const listStr = Array.isArray(templates) ? templates : [];
         listObj = listStr.filter(u => typeof u === 'string' && u).map(u => ({
-            id: 'ltpl-' + Math.random().toString(36).slice(2) + Date.now().toString(36),
+            id: createTempId('ltpl'),
             name: '未命名模板',
-            url: u,
+            url: cleanUrl(u),
             category: '内网台标'
         }));
     }
     listObj = listObj.filter(x => x.url);
-    let currId = typeof currentId === 'string' ? currentId : '';
-    if (!currId && typeof current === 'string') {
-        const it = listObj.find(x => x.url === current);
-        currId = it ? it.id : '';
-    }
-    if (!currId && listObj[0]) currId = listObj[0].id;
-    const currItem = listObj.find(x => x.id === currId) || listObj[0] || null;
-    const currUrl = currItem ? currItem.url : '';
+    const currentResolved = resolveCurrentItem(listObj, currentId, current, '');
 
-    if (await writeJson(CFG_LOGO, { templates: listObj, currentId: currId })) {
-        settings.logoTemplate = currUrl || settings.logoTemplate;
+    if (await writeJson(CFG_LOGO, { templates: listObj, currentId: currentResolved.currentId })) {
+        settings.logoTemplate = currentResolved.currentUrl || settings.logoTemplate;
         res.json({ success: true });
     } else {
         res.status(500).json({ success: false, message: '保存配置失败' });
@@ -133,19 +202,13 @@ router.post('/api/config/udpxy-servers', async (req, res) => {
 router.get('/api/config/group-titles', async (req, res) => {
     const cfg = await readJson(CFG_GROUPS, { titles: settings.groupTitles });
     const raw = Array.isArray(cfg.titles) ? cfg.titles : [];
-    const titlesObj = raw.map(x => {
-        if (typeof x === 'string') return { name: x, color: '' };
-        return { name: x && x.name ? x.name : '未命名分组', color: x && x.color ? x.color : '' };
-    }).filter(x => x.name);
+    const titlesObj = raw.map(normalizeGroupTitleForRead).filter(x => x.name);
     const titles = titlesObj.map(x => x.name);
     res.json({ success: true, titles, titlesObj });
 });
 router.post('/api/config/group-titles', async (req, res) => {
     const { titles, titlesObj } = req.body || {};
-    let listObj = Array.isArray(titlesObj) ? titlesObj.map(x => ({
-        name: x && x.name ? x.name : '未命名分组',
-        color: x && x.color ? x.color : ''
-    })).filter(x => x.name) : [];
+    let listObj = Array.isArray(titlesObj) ? titlesObj.map(normalizeGroupTitleForWrite).filter(x => x.name) : [];
     if (listObj.length === 0) {
         const names = Array.isArray(titles) ? titles : [];
         listObj = names.filter(n => typeof n === 'string' && n).map(n => ({ name: n, color: '' }));
@@ -169,11 +232,11 @@ router.get('/api/config/group-rules', async (req, res) => {
 router.post('/api/config/group-rules', async (req, res) => {
     const { rules } = req.body || {};
     const list = Array.isArray(rules) ? rules.map(r => ({
-        name: r && r.name ? r.name : '',
+        name: cleanText(r && r.name, 64),
         matchers: Array.isArray(r && r.matchers) ? r.matchers.map(m => ({
-            field: m && m.field ? m.field : 'name',
-            op: m && m.op ? m.op : 'contains',
-            value: m && m.value ? String(m.value) : ''
+            field: cleanText(m && m.field, 24) || 'name',
+            op: cleanText(m && m.op, 24) || 'contains',
+            value: cleanText(m && m.value !== undefined ? String(m.value) : '', 256)
         })).filter(m => m.value) : []
     })).filter(x => x.name) : [];
     if (await writeJson(CFG_GROUP_RULES, { rules: list })) {
@@ -188,13 +251,13 @@ router.get('/api/settings', (req, res) => {
 router.post('/api/settings/update', async (req, res) => {
     const { fccServers, logoTemplate, groupTitles, globalFcc: gf, externalUrl, internalUrl, useInternal, useExternal, securityToken, enableToken, proxyList } = req.body || {};
     if (Array.isArray(fccServers)) settings.fccServers = fccServers;
-    if (typeof logoTemplate === 'string') settings.logoTemplate = logoTemplate;
+    if (typeof logoTemplate === 'string') settings.logoTemplate = cleanUrl(logoTemplate);
     if (Array.isArray(groupTitles)) settings.groupTitles = groupTitles;
-    if (typeof externalUrl === 'string') settings.externalUrl = externalUrl;
-    if (typeof internalUrl === 'string') settings.internalUrl = internalUrl;
+    if (typeof externalUrl === 'string') settings.externalUrl = cleanUrl(externalUrl);
+    if (typeof internalUrl === 'string') settings.internalUrl = cleanUrl(internalUrl);
     if (typeof useInternal === 'boolean') settings.useInternal = useInternal;
     if (typeof useExternal === 'boolean') settings.useExternal = useExternal;
-    if (typeof securityToken === 'string') settings.securityToken = securityToken;
+    if (typeof securityToken === 'string') settings.securityToken = cleanText(securityToken, 256);
     if (typeof enableToken === 'boolean') settings.enableToken = enableToken;
 
     let ok = true;
@@ -210,17 +273,15 @@ router.post('/api/settings/update', async (req, res) => {
     }
 
     if (Array.isArray(proxyList)) {
-        settings.proxyList = proxyList.map(x => ({
-            type: normalizeProxyType(x && x.type),
-            url: x && x.url ? x.url.trim() : ''
-        })).filter(x => !!x.url);
+        settings.proxyList = normalizeProxyList(proxyList);
         const ok2 = await writeJson(CFG_PROXY, { list: settings.proxyList });
         ok = ok && ok2;
     }
 
     if (typeof gf === 'string') {
-        settings.globalFcc = gf;
-        const val = gf.includes('=') ? gf : `fcc=${gf}`;
+        settings.globalFcc = cleanText(gf, 256);
+        const gfValue = settings.globalFcc;
+        const val = gfValue.includes('=') ? gfValue : `fcc=${gfValue}`;
         // 更新内存中的流列表参数
         streamService.setStreams(streamService.getStreams().map(s => ({ ...s, httpParam: val })));
         const ok3 = await streamService.save();
@@ -235,13 +296,15 @@ router.post('/api/settings/update', async (req, res) => {
 });
 router.post('/api/settings/rename-group', async (req, res) => {
     const { from, to } = req.body || {};
-    if (!from || !to) return res.status(400).json({ success: false, message: '缺少分组名称' });
+    const fromName = cleanText(from, 64);
+    const toName = cleanText(to, 64);
+    if (!fromName || !toName) return res.status(400).json({ success: false, message: '缺少分组名称' });
     let updated = 0;
     const streams = streamService.getStreams();
     const newStreams = streams.map(s => {
-        if ((s.groupTitle || '') === from) {
+        if ((s.groupTitle || '') === fromName) {
             updated++;
-            return { ...s, groupTitle: to };
+            return { ...s, groupTitle: toName };
         }
         return s;
     });
@@ -250,8 +313,8 @@ router.post('/api/settings/rename-group', async (req, res) => {
         await streamService.save(); // 修复: 确保重命名后持久化
     }
     if (Array.isArray(settings.groupTitles)) {
-        const idx = settings.groupTitles.findIndex(g => g === from);
-        if (idx !== -1) settings.groupTitles[idx] = to;
+        const idx = settings.groupTitles.findIndex(g => g === fromName);
+        if (idx !== -1) settings.groupTitles[idx] = toName;
     }
     // 同时也应该保存 group_titles.json
     await writeJson(CFG_GROUPS, { titles: settings.groupTitles.map(g => ({ name: g, color: '' })) });
@@ -266,10 +329,7 @@ router.get('/api/config/proxies', async (req, res) => {
 });
 router.post('/api/config/proxies', async (req, res) => {
     const { list } = req.body || {};
-    const arr = Array.isArray(list) ? list.map(x => ({
-        type: normalizeProxyType(x && x.type),
-        url: x && x.url ? x.url.trim() : ''
-    })).filter(x => !!x.url) : [];
+    const arr = normalizeProxyList(list);
     if (await writeJson(CFG_PROXY, { list: arr })) {
         settings.proxyList = arr;
         res.json({ success: true });
@@ -293,9 +353,9 @@ router.post('/api/config/app-settings', async (req, res) => {
     const { useInternal, useExternal, internalUrl, externalUrl, securityToken, enableToken } = req.body || {};
     if (typeof useInternal === 'boolean') settings.useInternal = useInternal;
     if (typeof useExternal === 'boolean') settings.useExternal = useExternal;
-    if (typeof internalUrl === 'string') settings.internalUrl = internalUrl.trim();
-    if (typeof externalUrl === 'string') settings.externalUrl = externalUrl.trim();
-    if (typeof securityToken === 'string') settings.securityToken = securityToken.trim();
+    if (typeof internalUrl === 'string') settings.internalUrl = cleanUrl(internalUrl);
+    if (typeof externalUrl === 'string') settings.externalUrl = cleanUrl(externalUrl);
+    if (typeof securityToken === 'string') settings.securityToken = cleanText(securityToken, 256);
     if (typeof enableToken === 'boolean') settings.enableToken = enableToken;
     if (await writeJson(CFG_APPSET, {
         useInternal: settings.useInternal,
@@ -314,23 +374,13 @@ router.post('/api/config/app-settings', async (req, res) => {
 router.get('/api/config/epg-sources', async (req, res) => {
     const cfg = await readJson(CFG_EPG, { sources: [] });
     const list = Array.isArray(cfg.sources) ? cfg.sources : [];
-    const normalized = list.map(x => ({
-        id: x && x.id ? x.id : ('epg-' + crypto.randomUUID()),
-        name: x && x.name ? x.name : '未命名EPG',
-        url: x && x.url ? x.url : '',
-        scope: (x && x.scope === '外网EPG') ? '外网EPG' : '内网EPG'
-    }));
+    const normalized = list.map(normalizeEpgSourceForRead);
     res.json({ success: true, sources: normalized });
 });
 
 router.post('/api/config/epg-sources', async (req, res) => {
     const { sources } = req.body || {};
-    const list = Array.isArray(sources) ? sources.map(x => ({
-        id: x && x.id ? x.id : ('epg-' + Math.random().toString(36).slice(2) + Date.now().toString(36)),
-        name: x && x.name ? x.name : '未命名EPG',
-        url: x && x.url ? x.url : '',
-        scope: (x && x.scope === '外网EPG') ? '外网EPG' : '内网EPG'
-    })).filter(x => !!x.url) : [];
+    const list = Array.isArray(sources) ? sources.map(normalizeEpgSourceForWrite).filter(x => !!x.url) : [];
     if (await writeJson(CFG_EPG, { sources: list })) {
         res.json({ success: true });
     } else {

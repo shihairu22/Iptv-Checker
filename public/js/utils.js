@@ -221,7 +221,7 @@ function parsePlaylistText(text) {
         } else if (line.startsWith('#')) {
             // ignore other directives
             continue;
-        } else if (line.includes(',') && !line.includes('://')) {
+        } else if (line.includes(',') && line.includes('://')) {
             // 简单格式: CCTV1,http://...
             const parts = line.split(',');
             if (parts.length >= 2) {

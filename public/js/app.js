@@ -80,19 +80,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // 6. 初始化范围检测预览
     updateRangeSummary();
-
-    // 7. 检查 udpxy 配置状态
-    const udpxyServers = getUdpxyServers();
-    if (udpxyServers.length === 0) {
-        // 提示用户配置 udpxy 服务器
-        setTimeout(() => {
-            showCenterConfirm(
-                '⚠️ 未检测到 UDPXY 服务器配置\n\n请在左侧"UDPXY 服务器"区域添加您的 udpxy 地址。\n\n例如: http://10.0.0.1:5140',
-                null,
-                true
-            );
-        }, 500);
-    }
 });
 
 // --- Socket.IO 事件 ---
@@ -151,21 +138,35 @@ function updateTaskUI(task) {
                 startBtn.classList.add('btn-success');
             }
         }
-    } else {
-        // 任务未运行 — 检查是否刚完成
-        isTaskPaused = false;
 
-        if (task.finished > 0 && task.finished === task.total) {
-            // 检测完成，显示结果并刷新数据
+
+        if (!task.running && !task.paused && task.finished === task.total) {
             showProgress(task.total, task.total, `检测完成 | 总数: ${task.total} 在线: ${task.success} 离线: ${task.fail}`);
             getStreams();
-        }
 
+            // 恢复按钮
+            const startBtn = document.getElementById('startDetectBtn');
+            if (startBtn) {
+                startBtn.innerHTML = '<i class="bi bi-play-circle-fill me-1"></i> 开始检测';
+                startBtn.classList.remove('btn-warning');
+                startBtn.classList.add('btn-success');
+            }
+            isTaskPaused = false;
+        }
+    } else {
+        // 任务未运行
+        isTaskPaused = false;
         const startBtn = document.getElementById('startDetectBtn');
         if (startBtn) {
             startBtn.innerHTML = '<i class="bi bi-play-circle-fill me-1"></i> 开始检测';
             startBtn.classList.remove('btn-warning');
             startBtn.classList.add('btn-success');
+        }
+
+        // 只有在 UI 显示着进度条时才隐藏，避免刚加载页面就闪烁
+        const progressBarWrap = document.getElementById('progressBarWrap');
+        if (progressBarWrap && progressBarWrap.style.display !== 'none' && !task.logs?.length) {
+            // socket 连接初次会发送 status，可能是空闲状态，不做强制隐藏
         }
     }
 }
@@ -427,9 +428,15 @@ function updateStatsAndDisplay() {
     const start = (sizeVal >= total) ? 0 : (currentPage - 1) * sizeVal;
     const end = (sizeVal >= total) ? total : Math.min(start + sizeVal, total);
     const pageArr = filtered.slice(start, end);
+    const streamIndexMap = new Map();
+    allStreams.forEach((s, i) => streamIndexMap.set(s, i));
+    const pageEntries = pageArr.map(stream => ({
+        stream,
+        index: streamIndexMap.has(stream) ? streamIndexMap.get(stream) : -1
+    })).filter(item => item.index >= 0);
 
     // 渲染列表
-    renderStreamsList(pageArr);
+    renderStreamsList(pageEntries);
 
     // 更新分页控件
     updatePaginationControls(sizeVal, total, pages);
@@ -438,11 +445,11 @@ function updateStatsAndDisplay() {
 
 function renderStreamsList(arr) {
     const e = typeof escapeHTML === 'function' ? escapeHTML : (s => s);
-    const render = arr => arr.map((stream, idx) => `
+    const render = arr => arr.map(({ stream, index }) => `
 <div class="stream-item d-flex align-items-center ${stream.isAvailable ? 'available' : 'unavailable'} p-3 mb-2 rounded border bg-white shadow-sm position-relative overflow-hidden">
     <div class="d-flex align-items-center flex-grow-1 gap-3 flex-wrap">
         <div class="form-check mb-0">
-             <input type="checkbox" class="form-check-input sel-index" data-index="${allStreams.indexOf(stream)}">
+             <input type="checkbox" class="form-check-input sel-index" data-index="${index}">
         </div>
         
         ${stream.logo ? `<img src="${e(stream.logo)}" alt="" class="rounded bg-light border" style="width:48px;height:48px;object-fit:contain;" onerror="if(!this.dataset.err){this.dataset.err=1;this.src='/api/proxy/stream?url='+encodeURIComponent(this.src);}">` : '<div class="rounded bg-light border d-flex align-items-center justify-content-center text-muted" style="width:48px;height:48px;"><i class="bi bi-tv"></i></div>'}
@@ -476,7 +483,7 @@ function renderStreamsList(arr) {
                 <i class="bi bi-play-fill"></i>
             </button>
         </div>
-        <button class="btn btn-sm btn-outline-danger" onclick="deleteStream(${allStreams.indexOf(stream)})" title="删除">
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteStream(${index})" title="删除">
             <i class="bi bi-trash"></i> <span class="d-none d-md-inline">删除</span>
         </button>
     </div>
@@ -570,15 +577,16 @@ function getUdpxyServers() {
         let list = raw ? JSON.parse(raw) : [];
         if (!Array.isArray(list)) list = [];
         if (list.length === 0) {
-            // 不设置默认值，让用户明确配置
+            list = [{ id: String(Date.now()), name: '默认服务器', url: 'http://192.168.88.1:8333' }];
             localStorage.setItem(UDPS_KEY, JSON.stringify(list));
-            localStorage.removeItem(UDP_CURR_KEY);
+            localStorage.setItem(UDP_CURR_KEY, list[0].id);
         }
         return list;
     } catch (e) {
-        localStorage.removeItem(UDPS_KEY);
-        localStorage.removeItem(UDP_CURR_KEY);
-        return [];
+        const list = [{ id: String(Date.now()), name: '默认服务器', url: 'http://192.168.88.1:8333' }];
+        localStorage.setItem(UDPS_KEY, JSON.stringify(list));
+        localStorage.setItem(UDP_CURR_KEY, list[0].id);
+        return list;
     }
 }
 function saveUdpxyServers(list) { localStorage.setItem(UDPS_KEY, JSON.stringify(list)); }
@@ -586,7 +594,6 @@ function getCurrentUdpxyId() { return localStorage.getItem(UDP_CURR_KEY); }
 function setCurrentUdpxyId(id) { localStorage.setItem(UDP_CURR_KEY, id); }
 function getCurrentUdpxyUrl() {
     const list = getUdpxyServers();
-    if (list.length === 0) return ''; // 返回空，没有配置的 udpxy
     const curr = getCurrentUdpxyId();
     const found = list.find(s => s.id === curr) || list[0];
     return found ? found.url : '';
@@ -614,76 +621,25 @@ function addUdpxy(name, url) {
         return;
     }
     if (!name) name = '未命名服务器';
-
-    // 测试服务器可用性
-    (async () => {
-        try {
-            const testUrl = url.endsWith('/') ? url + 'status' : url + '/status';
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-            try {
-                const response = await fetch(testUrl, {
-                    method: 'GET',
-                    signal: controller.signal,
-                    mode: 'no-cors'
-                });
-                clearTimeout(timeoutId);
-
-                const list = getUdpxyServers();
-                const id = String(Date.now());
-                list.push({ id, name, url });
-                saveUdpxyServers(list);
-                setCurrentUdpxyId(id);
-                renderUdpxySelect();
-                syncUdpxyServersBackend();
-
-                showCenterConfirm(`✓ 服务器 "${name}" 已添加\n地址: ${url}`, null, false);
-            } catch (timeoutErr) {
-                clearTimeout(timeoutId);
-                // 超时时，仍然允许添加但提示用户
-                const list = getUdpxyServers();
-                const id = String(Date.now());
-                list.push({ id, name, url });
-                saveUdpxyServers(list);
-                setCurrentUdpxyId(id);
-                renderUdpxySelect();
-                syncUdpxyServersBackend();
-
-                showCenterConfirm(`⚠️ 服务器响应超时或离线\n地址: ${url}\n已保存配置，请检查网络连接`, null, true);
-            }
-        } catch (e) {
-            // 其他错误，仍然允许添加
-            const list = getUdpxyServers();
-            const id = String(Date.now());
-            list.push({ id, name, url });
-            saveUdpxyServers(list);
-            setCurrentUdpxyId(id);
-            renderUdpxySelect();
-            syncUdpxyServersBackend();
-
-            showCenterConfirm(`⚠️ 无法验证服务器（网络可能受限）\n地址: ${url}`, null, true);
-        }
-    })();
+    const list = getUdpxyServers();
+    const id = String(Date.now());
+    list.push({ id, name, url });
+    saveUdpxyServers(list);
+    setCurrentUdpxyId(id);
+    renderUdpxySelect();
+    syncUdpxyServersBackend();
 }
 function deleteCurrentUdpxy() {
     const list = getUdpxyServers();
-    if (list.length === 0) {
-        showCenterConfirm('当前没有配置任何 UDPXY 服务器', null, true);
+    if (list.length <= 1) {
+        showCenterConfirm('至少保留一个服务器', null, true);
         return;
     }
     const curr = getCurrentUdpxyId();
     const idx = list.findIndex(s => s.id === curr);
     if (idx >= 0) list.splice(idx, 1);
     saveUdpxyServers(list);
-
-    if (list.length > 0) {
-        setCurrentUdpxyId(list[0].id);
-    } else {
-        localStorage.removeItem(UDP_CURR_KEY);
-        showCenterConfirm('⚠️ 已删除最后一个 UDPXY 服务器\n请添加新的 UDPXY 服务器地址以继续使用', null, true);
-    }
-
+    setCurrentUdpxyId(list[0].id);
     renderUdpxySelect();
     syncUdpxyServersBackend();
 }
@@ -869,7 +825,7 @@ function bindUIEvents() {
     const batchDeleteBtn = document.getElementById('batchDeleteBtn');
     if (batchDeleteBtn) {
         batchDeleteBtn.onclick = async function () {
-            const arr = Array.from(selectedSet).sort((a, b) => b - a); // descending to avoid index shift
+            const arr = Array.from(selectedSet).sort((a, b) => b - a);
             if (arr.length === 0) return;
             showCenterConfirm(`确定删除选中的 ${arr.length} 个频道吗？`, async function (ok) {
                 if (!ok) return;
@@ -1283,5 +1239,30 @@ async function checkGithubUpdate() {
 }
 
 async function doUpdate() {
-    alert('请在服务器执行以下命令更新：\ndocker-compose pull && docker-compose up -d');
+    if (isDockerEnv) {
+        alert('Docker 环境无法直接通过网页更新。\n\n请在服务器执行以下命令更新：\ndocker-compose pull && docker-compose up -d');
+        return;
+    }
+
+    if (!confirm('确定要尝试自动更新吗？\n请确保已保存数据。')) return;
+
+    const btn = document.getElementById('btnUpdate');
+    if (!btn) return;
+    const oldText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '更新中...';
+
+    try {
+        const r = await fetch('/api/system/update', { method: 'POST' });
+        const j = await r.json();
+        alert(j.message);
+        if (j.success) {
+            location.reload();
+        }
+    } catch (e) {
+        alert('请求失败');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = oldText;
+    }
 }

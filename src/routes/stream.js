@@ -3,6 +3,35 @@ const router = express.Router();
 const streamService = require('../services/streamService');
 const { ffprobeCheck } = require('../ffprobe');
 
+function cleanText(value, maxLen = 256) {
+    if (typeof value !== 'string') return '';
+    return value.trim().slice(0, maxLen);
+}
+
+function cleanUrl(value, maxLen = 2048) {
+    return cleanText(value, maxLen);
+}
+
+function normalizeUpdateValue(key, value) {
+    if (value === undefined || value === null) return undefined;
+    switch (key) {
+        case 'name':
+            return cleanText(String(value), 128);
+        case 'groupTitle':
+            return cleanText(String(value), 64);
+        case 'logo':
+        case 'catchupBase':
+            return cleanUrl(String(value));
+        case 'tvgId':
+        case 'tvgName':
+            return cleanText(String(value), 128);
+        case 'httpParam':
+            return cleanText(String(value), 256);
+        default:
+            return undefined;
+    }
+}
+
 // 获取所有流
 router.get('/streams', (req, res) => {
     res.json({ success: true, streams: streamService.getStreams() });
@@ -16,8 +45,9 @@ router.get('/stats', (req, res) => {
 // 单条检测
 router.post('/check-stream', async (req, res) => {
     let { udpxyUrl, multicastUrl, name } = req.body;
-    udpxyUrl = String(udpxyUrl || '').trim();
-    multicastUrl = String(multicastUrl || '').trim();
+    udpxyUrl = cleanUrl(String(udpxyUrl || ''));
+    multicastUrl = cleanUrl(String(multicastUrl || ''));
+    name = cleanText(String(name || ''), 128);
     let fullUrl = multicastUrl;
     if (fullUrl.startsWith('rtp://') && udpxyUrl) {
         fullUrl = `${udpxyUrl}/rtp/${fullUrl.replace('rtp://', '')}`;
@@ -60,8 +90,12 @@ router.post('/check-stream', async (req, res) => {
                 ...data,
                 udpxyUrl,
                 multicastUrl,
-                name: name || data.serviceName || ''
+                name: name || cleanText(String(data.serviceName || ''), 128)
             });
+        }
+        const saved = await streamService.save();
+        if (!saved) {
+            return res.status(500).json({ success: false, message: '检测结果保存失败' });
         }
         res.json({ success: true, ...data });
     } catch (error) {
@@ -86,32 +120,40 @@ router.delete('/streams', async (req, res) => {
     res.json({ success: true });
 });
 // 更新单条流信息（按 udpxyUrl + multicastUrl 查找）
-router.post('/stream/update', (req, res) => {
+router.post('/stream/update', async (req, res) => {
     const { udpxyUrl, multicastUrl, update } = req.body;
     if (!update || typeof update !== 'object') {
         return res.json({ success: false, message: '缺少 update 参数' });
     }
+    const safeUdpxyUrl = cleanUrl(String(udpxyUrl || ''));
+    const safeMulticastUrl = cleanUrl(String(multicastUrl || ''));
     const streams = streamService.getStreams();
-    const idx = streams.findIndex(s => s.udpxyUrl === udpxyUrl && s.multicastUrl === multicastUrl);
+    const idx = streams.findIndex(s => s.udpxyUrl === safeUdpxyUrl && s.multicastUrl === safeMulticastUrl);
     if (idx >= 0) {
         // 只允许更新安全字段
         const allowed = ['name', 'groupTitle', 'logo', 'tvgId', 'tvgName', 'httpParam', 'catchupBase'];
         const safeUpdate = {};
         for (const key of allowed) {
-            if (update[key] !== undefined) safeUpdate[key] = update[key];
+            const value = normalizeUpdateValue(key, update[key]);
+            if (value !== undefined && value !== '') safeUpdate[key] = value;
         }
         streamService.updateStream(idx, safeUpdate);
-        streamService.save();
-        res.json({ success: true });
+        const saved = await streamService.save();
+        if (saved) {
+            res.json({ success: true });
+        } else {
+            res.status(500).json({ success: false, message: '保存失败' });
+        }
     } else {
         res.json({ success: false, message: '未找到对应的流' });
     }
 });
 
 // 批量设置 FCC 参数
-router.post('/set-fcc', (req, res) => {
+router.post('/set-fcc', async (req, res) => {
     const { fcc } = req.body;
-    if (!fcc || typeof fcc !== 'string') {
+    const safeFcc = cleanText(typeof fcc === 'string' ? fcc : '', 256);
+    if (!safeFcc) {
         return res.json({ success: false, message: '缺少 fcc 参数' });
     }
     const streams = streamService.getStreams();
@@ -121,12 +163,16 @@ router.post('/set-fcc', (req, res) => {
         const url = (s.multicastUrl || '').trim();
         const isMulticast = !!s.udpxyUrl || /^(rtp|udp):\/\//i.test(url);
         if (isMulticast) {
-            streamService.updateStream(idx, { httpParam: `fcc=${fcc}` });
+            streamService.updateStream(idx, { httpParam: `fcc=${safeFcc}` });
             count++;
         }
     });
-    streamService.save();
-    res.json({ success: true, count });
+    const saved = await streamService.save();
+    if (saved) {
+        res.json({ success: true, count });
+    } else {
+        res.status(500).json({ success: false, message: '保存失败', count });
+    }
 });
 
 module.exports = router;

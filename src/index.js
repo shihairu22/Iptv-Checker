@@ -86,6 +86,12 @@ async function startServer() {
         app.use('/api', streamRouter);
         app.use('/api/persist', persistRouter);
         app.get('/api/system/info', (req, res) => res.json({ success: true, version: require('../package.json').version }));
+        app.post('/api/system/update', (req, res) => {
+            res.status(501).json({
+                success: false,
+                message: '当前版本未内置自动更新，请使用 Git 或 Docker 手动更新。'
+            });
+        });
 
         // 5. 流媒体代理模块 (GET 请求，不受 CSRF 影响)
         // URL 安全校验：仅允许 http/https，屏蔽本地回环和链路本地地址

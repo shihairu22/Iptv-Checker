@@ -81,7 +81,28 @@ function verifyPassword(password, storedPassword) {
 }
 
 async function loadUsers() {
-    return await persistence.readJson('users.json', { username: 'admin', password: hashPassword('admin') });
+    const existing = await persistence.readJson('users.json', null);
+    if (existing && typeof existing.username === 'string' && typeof existing.password === 'string') {
+        return existing;
+    }
+
+    const presetPassword = typeof process.env.IPTV_ADMIN_PASSWORD === 'string' ? process.env.IPTV_ADMIN_PASSWORD.trim() : '';
+    const generatedPassword = crypto.randomBytes(8).toString('hex');
+    const initialPassword = presetPassword || generatedPassword;
+
+    const user = { username: 'admin', password: hashPassword(initialPassword) };
+    const saved = await persistence.writeJson('users.json', user);
+    if (saved) {
+        if (presetPassword) {
+            console.warn('[Auth] users.json 不存在，已使用环境变量 IPTV_ADMIN_PASSWORD 初始化管理员密码。');
+        } else {
+            console.warn(`[Auth] users.json 不存在，已自动初始化管理员账号。初始密码: ${initialPassword}`);
+            console.warn('[Auth] 请立即登录并在设置中修改密码。');
+        }
+    } else {
+        console.error('[Auth] users.json 初始化失败，请检查 data 目录写权限。');
+    }
+    return user;
 }
 
 // 验证码接口
