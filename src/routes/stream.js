@@ -23,6 +23,12 @@ router.post('/check-stream', async (req, res) => {
         fullUrl = `${udpxyUrl}/rtp/${fullUrl.replace('rtp://', '')}`;
     }
 
+    // 协议安全校验：仅允许合法的流媒体协议，防止 file:// 等危险协议导致 SSRF
+    const allowedProtocols = ['rtp://', 'udp://', 'http://', 'https://'];
+    if (!allowedProtocols.some(p => fullUrl.toLowerCase().startsWith(p))) {
+        return res.status(400).json({ success: false, message: '不支持的流协议' });
+    }
+
     try {
         // 使用 Promise 包装 ffprobeCheck 以支持 async/await
         const data = await new Promise((resolve, reject) => {
