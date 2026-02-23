@@ -14,8 +14,6 @@ const CFG_GROUP_RULES = 'group_rules.json';
 const CFG_EPG = 'epg_sources.json';
 const CFG_PROXY = 'proxy_servers.json';
 const CFG_APPSET = 'app_settings.json';
-const DATA_DIR = path.join(__dirname, '../../data');
-const EPG_DIR = path.join(DATA_DIR, 'epg');
 
 // 统一使用 persistenceService 的原子读写（自带写锁 + temp+rename）
 async function readJson(file, defObj) {
@@ -33,12 +31,6 @@ function normalizeProxyType(t) {
     if (low === 'proxy') return '单播代理';
     if (low === 'external' || low === 'internet') return '组播代理';
     return '组播代理';
-}
-
-async function ensureEpgDir() {
-    try {
-        await fs.mkdir(EPG_DIR, { recursive: true });
-    } catch (e) { }
 }
 
 // 使用 getter 确保始终获取最新的 settings 对象
@@ -231,7 +223,8 @@ router.post('/api/settings/update', async (req, res) => {
         const val = gf.includes('=') ? gf : `fcc=${gf}`;
         // 更新内存中的流列表参数
         streamService.setStreams(streamService.getStreams().map(s => ({ ...s, httpParam: val })));
-        await streamService.save();
+        const ok3 = await streamService.save();
+        ok = ok && !!ok3;
     }
 
     if (ok) {
