@@ -151,35 +151,21 @@ function updateTaskUI(task) {
                 startBtn.classList.add('btn-success');
             }
         }
+    } else {
+        // 任务未运行 — 检查是否刚完成
+        isTaskPaused = false;
 
-
-        if (!task.running && !task.paused && task.finished === task.total) {
+        if (task.finished > 0 && task.finished === task.total) {
+            // 检测完成，显示结果并刷新数据
             showProgress(task.total, task.total, `检测完成 | 总数: ${task.total} 在线: ${task.success} 离线: ${task.fail}`);
             getStreams();
-
-            // 恢复按钮
-            const startBtn = document.getElementById('startDetectBtn');
-            if (startBtn) {
-                startBtn.innerHTML = '<i class="bi bi-play-circle-fill me-1"></i> 开始检测';
-                startBtn.classList.remove('btn-warning');
-                startBtn.classList.add('btn-success');
-            }
-            isTaskPaused = false;
         }
-    } else {
-        // 任务未运行
-        isTaskPaused = false;
+
         const startBtn = document.getElementById('startDetectBtn');
         if (startBtn) {
             startBtn.innerHTML = '<i class="bi bi-play-circle-fill me-1"></i> 开始检测';
             startBtn.classList.remove('btn-warning');
             startBtn.classList.add('btn-success');
-        }
-
-        // 只有在 UI 显示着进度条时才隐藏，避免刚加载页面就闪烁
-        const progressBarWrap = document.getElementById('progressBarWrap');
-        if (progressBarWrap && progressBarWrap.style.display !== 'none' && !task.logs?.length) {
-            // socket 连接初次会发送 status，可能是空闲状态，不做强制隐藏
         }
     }
 }
@@ -1297,30 +1283,5 @@ async function checkGithubUpdate() {
 }
 
 async function doUpdate() {
-    if (isDockerEnv) {
-        alert('Docker 环境无法直接通过网页更新。\n\n请在服务器执行以下命令更新：\ndocker-compose pull && docker-compose up -d');
-        return;
-    }
-
-    if (!confirm('确定要尝试自动更新吗？\n请确保已保存数据。')) return;
-
-    const btn = document.getElementById('btnUpdate');
-    if (!btn) return;
-    const oldText = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = '更新中...';
-
-    try {
-        const r = await fetch('/api/system/update', { method: 'POST' });
-        const j = await r.json();
-        alert(j.message);
-        if (j.success) {
-            location.reload();
-        }
-    } catch (e) {
-        alert('请求失败');
-    } finally {
-        btn.disabled = false;
-        btn.textContent = oldText;
-    }
+    alert('请在服务器执行以下命令更新：\ndocker-compose pull && docker-compose up -d');
 }

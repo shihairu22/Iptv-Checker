@@ -42,6 +42,7 @@ function checkNetwork(urlStr) {
 
                 const timer = setTimeout(() => {
                     if (!satisfied) {
+                        satisfied = true;
                         try { socket.close(); } catch (e) { }
                         resolve(false); // 超时未收到包
                     }

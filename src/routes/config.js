@@ -1,42 +1,28 @@
 const express = require('express');
 const router = express.Router();
 const path = require('path');
-const fs = require('fs').promises;
-const axios = require('axios');
-const zlib = require('zlib');
-const { XMLParser } = require('fast-xml-parser');
+const crypto = require('crypto');
+const persistence = require('../services/persistenceService');
 const streamService = require('../services/streamService');
 
+// 配置文件名（由 persistenceService 统一管理读写）
+const CFG_LOGO = 'logo_templates.json';
+const CFG_FCC = 'fcc_servers.json';
+const CFG_UDPXY = 'udpxy_servers.json';
+const CFG_GROUPS = 'group_titles.json';
+const CFG_GROUP_RULES = 'group_rules.json';
+const CFG_EPG = 'epg_sources.json';
+const CFG_PROXY = 'proxy_servers.json';
+const CFG_APPSET = 'app_settings.json';
 const DATA_DIR = path.join(__dirname, '../../data');
-const CFG_LOGO = path.join(DATA_DIR, 'logo_templates.json');
-const CFG_FCC = path.join(DATA_DIR, 'fcc_servers.json');
-const CFG_UDPXY = path.join(DATA_DIR, 'udpxy_servers.json');
-const CFG_GROUPS = path.join(DATA_DIR, 'group_titles.json');
-const CFG_GROUP_RULES = path.join(DATA_DIR, 'group_rules.json');
-const CFG_EPG = path.join(DATA_DIR, 'epg_sources.json');
-const CFG_PROXY = path.join(DATA_DIR, 'proxy_servers.json');
-const CFG_APPSET = path.join(DATA_DIR, 'app_settings.json');
 const EPG_DIR = path.join(DATA_DIR, 'epg');
 
-async function ensureDataDir() {
-    try { await fs.mkdir(DATA_DIR, { recursive: true }); } catch (e) { }
-}
+// 统一使用 persistenceService 的原子读写（自带写锁 + temp+rename）
 async function readJson(file, defObj) {
-    try {
-        const txt = await fs.readFile(file, 'utf-8');
-        return JSON.parse(txt);
-    } catch (e) { }
-    return defObj;
+    return await persistence.readJson(file, defObj);
 }
 async function writeJson(file, obj) {
-    await ensureDataDir();
-    try {
-        await fs.writeFile(file, JSON.stringify(obj, null, 2), 'utf-8');
-        return true;
-    } catch (e) {
-        console.error('写入失败', file);
-        return false;
-    }
+    return await persistence.writeJson(file, obj);
 }
 
 function normalizeProxyType(t) {
@@ -55,7 +41,19 @@ async function ensureEpgDir() {
     } catch (e) { }
 }
 
-let settings = streamService.settings;
+// 使用 getter 确保始终获取最新的 settings 对象
+// （streamService.init() 会用展开运算符重建 settings 对象，直接引用会失效）
+const settings = new Proxy({}, {
+    get(_, prop) { return streamService.settings[prop]; },
+    set(_, prop, value) { streamService.settings[prop] = value; return true; },
+    has(_, prop) { return prop in streamService.settings; },
+    ownKeys() { return Reflect.ownKeys(streamService.settings); },
+    getOwnPropertyDescriptor(_, prop) {
+        if (prop in streamService.settings) {
+            return { configurable: true, enumerable: true, value: streamService.settings[prop] };
+        }
+    }
+});
 
 router.get('/api/config/logo-templates', async (req, res) => {
     const defId = 'ltpl-default';
@@ -63,9 +61,9 @@ router.get('/api/config/logo-templates', async (req, res) => {
     const listRaw = Array.isArray(cfg.templates) ? cfg.templates : [];
     const listObj = listRaw.map(t => {
         if (typeof t === 'string') {
-            return { id: 'ltpl-' + require('crypto').randomUUID(), name: '未命名模板', url: t, category: '内网台标' };
+            return { id: 'ltpl-' + crypto.randomUUID(), name: '未命名模板', url: t, category: '内网台标' };
         }
-        return { id: t.id || ('ltpl-' + require('crypto').randomUUID()), name: t.name || '未命名模板', url: t.url || '', category: typeof t.category === 'string' ? (t.category === '内网' ? '内网台标' : (t.category === '外网' ? '外网台标' : t.category)) : '内网台标' };
+        return { id: t.id || ('ltpl-' + crypto.randomUUID()), name: t.name || '未命名模板', url: t.url || '', category: typeof t.category === 'string' ? (t.category === '内网' ? '内网台标' : (t.category === '外网' ? '外网台标' : t.category)) : '内网台标' };
     }).filter(x => x.url);
     let currId = typeof cfg.currentId === 'string' ? cfg.currentId : '';
     let currUrl = '';
@@ -324,7 +322,7 @@ router.get('/api/config/epg-sources', async (req, res) => {
     const cfg = await readJson(CFG_EPG, { sources: [] });
     const list = Array.isArray(cfg.sources) ? cfg.sources : [];
     const normalized = list.map(x => ({
-        id: x && x.id ? x.id : ('epg-' + require('crypto').randomUUID()),
+        id: x && x.id ? x.id : ('epg-' + crypto.randomUUID()),
         name: x && x.name ? x.name : '未命名EPG',
         url: x && x.url ? x.url : '',
         scope: (x && x.scope === '外网EPG') ? '外网EPG' : '内网EPG'

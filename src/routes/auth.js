@@ -55,21 +55,6 @@ function deleteSession(token) {
 
 (async () => { await loadSessions(); })();
 
-// 每小时清理过期 Session，防止内存累积
-setInterval(() => {
-    const now = Date.now();
-    let cleaned = 0;
-    for (const [token, sess] of SESSIONS) {
-        if (now > sess.expires) {
-            SESSIONS.delete(token);
-            cleaned++;
-        }
-    }
-    if (cleaned > 0) {
-        scheduleSaveSessions();
-        console.log(`[Auth] 已清理 ${cleaned} 个过期 Session`);
-    }
-}, 60 * 60 * 1000);
 
 // --- 密码安全辅助函数 ---
 function hashPassword(password) {
@@ -80,12 +65,19 @@ function hashPassword(password) {
 
 function verifyPassword(password, storedPassword) {
     if (!storedPassword.includes(':')) {
-        // 兼容旧版明文密码
-        return password === storedPassword;
+        // 兼容旧版明文密码 — 使用常量时间比较
+        const a = Buffer.from(password);
+        const b = Buffer.from(storedPassword);
+        if (a.length !== b.length) return false;
+        return crypto.timingSafeEqual(a, b);
     }
     const [salt, hash] = storedPassword.split(':');
     const key = crypto.scryptSync(password, salt, 64).toString('hex');
-    return key === hash;
+    // 常量时间比较，防止时序攻击
+    const keyBuf = Buffer.from(key, 'hex');
+    const hashBuf = Buffer.from(hash, 'hex');
+    if (keyBuf.length !== hashBuf.length) return false;
+    return crypto.timingSafeEqual(keyBuf, hashBuf);
 }
 
 async function loadUsers() {
@@ -208,4 +200,17 @@ router.isValidToken = (token) => {
     }
     return true;
 };
+// 定期清理过期的验证码和 Session（每 5 分钟）
+setInterval(() => {
+    const now = Date.now();
+    // 清理过期验证码
+    for (const [id, data] of CAPTCHA_STORE.entries()) {
+        if (now > data.expires) CAPTCHA_STORE.delete(id);
+    }
+    // 清理过期 Session
+    for (const [token, sess] of SESSIONS.entries()) {
+        if (now > sess.expires) deleteSession(token);
+    }
+}, 5 * 60 * 1000);
+
 module.exports = router;

@@ -51,6 +51,10 @@ router.post('/load-version', requireAuth, async (req, res) => {
     try {
         const { filename } = req.body;
         if (!filename) return res.status(400).json({ success: false, message: '文件名称为空' });
+        // 路径穿越防护
+        if (!persistence.validateFilename(filename)) {
+            return res.status(400).json({ success: false, message: '文件名不合法' });
+        }
 
         const ok = await streamService.loadFromFile(filename);
         if (ok) {
@@ -70,6 +74,10 @@ router.delete('/delete-version', requireAuth, async (req, res) => {
     try {
         const { filename } = req.body;
         if (!filename) return res.status(400).json({ success: false, message: '文件名称为空' });
+        // 路径穿越防护
+        if (!persistence.validateFilename(filename)) {
+            return res.status(400).json({ success: false, message: '文件名不合法' });
+        }
 
         const ok = await persistence.deleteBackup(filename);
         if (ok) {

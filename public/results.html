@@ -568,12 +568,15 @@
       tbody.innerHTML = '';
       const arr = Array.isArray(streamsList) ? streamsList : [];
       arr.slice(0, 50).forEach((s, i) => {
-        const nameEsc = escapeHTML(name || '');
+        const tr = document.createElement('tr');
+        const sName = (s && s.name) || (s && s.multicastUrl) || '';
+        const sUrl = (s && s.multicastUrl) || '';
+        const nameEsc = escapeHTML(sName);
         tr.innerHTML = '<td>' + nameEsc + '</td><td><button class="btn btn-outline-primary btn-sm" id="apiPlayBtn-' + i + '">播放</button></td>';
         tbody.appendChild(tr);
         const btn = document.getElementById('apiPlayBtn-' + i);
-        if (btn) btn.onclick = function () { if (video && url) { video.src = url; video.play().catch(() => { }); } };
-        if (i === 0 && video && url) { video.src = url; }
+        if (btn) btn.onclick = function () { if (video && sUrl) { video.src = sUrl; video.play().catch(() => { }); } };
+        if (i === 0 && video && sUrl) { video.src = sUrl; }
       });
       modal.style.display = 'block';
       modal.querySelector('.modal').classList.add('show');
@@ -857,6 +860,7 @@
         const tbody = document.getElementById('groupRuleTbodyR');
         tbody.innerHTML = '';
         rs.forEach((r, i) => {
+          const tr = document.createElement('tr');
           const id = 'grm-' + i;
           const valEsc = escapeHTML(r.value || '');
           tr.innerHTML = '<td><select class="form-select form-select-sm" id="ruleField-' + id + '"><option value="name">名称</option><option value="tvgName">tvg-name</option><option value="tvgId">tvg-id</option><option value="addr">地址</option><option value="codec">编码</option><option value="resolution">分辨率</option><option value="groupTitle">分组</option></select></td><td><select class="form-select form-select-sm" id="ruleOp-' + id + '"><option value="contains">包含</option><option value="not_contains">不包含</option><option value="equals">等于</option><option value="prefix">前缀</option><option value="suffix">后缀</option><option value="regex">正则</option></select></td><td><input class="form-control form-control-sm" id="ruleVal-' + id + '" value="' + valEsc + '"></td><td><button class="btn btn-outline-danger btn-sm" id="ruleDel-' + id + '">删除</button></td>';
@@ -929,6 +933,7 @@
         const tbody = document.getElementById('logoTplTbodyR');
         tbody.innerHTML = '';
         list.forEach(item => {
+          const tr = document.createElement('tr');
           const nameEsc = escapeHTML(item.name || '');
           const urlEsc = escapeHTML(item.url || '');
           tr.innerHTML = '<td><input class="form-control form-control-sm" id="logoTplName-' + item.id + '" value="' + nameEsc + '"></td><td><input class="form-control form-control-sm" id="logoTplUrl-' + item.id + '" value="' + urlEsc + '"></td><td><select class="form-select form-select-sm" id="logoTplCat-' + item.id + '"><option value="内网台标">内网台标</option><option value="外网台标">外网台标</option></select></td><td><button class="btn btn-outline-danger btn-sm" id="logoTplDel-' + item.id + '">删除</button></td>';
@@ -977,6 +982,7 @@
         const tbody = document.getElementById('proxyTbodyR');
         tbody.innerHTML = '';
         (Array.isArray(list) ? list : []).forEach(item => {
+          const tr = document.createElement('tr');
           const id = item && item.id ? item.id : uuid();
           const urlEsc = escapeHTML(item && item.url ? item.url : '');
           tr.innerHTML = '<td><select class="form-select form-select-sm" id="proxyType-' + id + '"><option value="组播代理">组播代理</option><option value="单播代理">单播代理</option></select></td><td><input class="form-control form-control-sm" id="proxyUrl-' + id + '" value="' + urlEsc + '" placeholder="http(s)://域名或IP:端口"></td><td><button class="btn btn-outline-danger btn-sm" id="proxyDel-' + id + '">删除</button></td>';
@@ -993,7 +999,7 @@
       const saveBtn = document.getElementById('proxySaveBtnR');
       if (saveBtn) saveBtn.onclick = async function () {
         const tbody = document.getElementById('proxyTbodyR'); if (!tbody) return; const rows = Array.from(tbody.querySelectorAll('tr')); const list = rows.map(tr => {
-          const typeEl = tr.querySelector('select[id^="proxyType-"]'); const urlEl = tr.querySelector('input[id^="proxyUrl-"]'); const type = typeEl ? typeEl.value : '组播代理'; '组播代理';
+          const typeEl = tr.querySelector('select[id^="proxyType-"]'); const urlEl = tr.querySelector('input[id^="proxyUrl-"]'); const type = typeEl ? typeEl.value : '组播代理';
           const url = urlEl ? (urlEl.value || '').trim() : ''; if (!url) return null; return { type, url };
         }).filter(x => x); localStorage.setItem('proxyList', JSON.stringify(list)); appSettings.proxyList = list; try { await fetch('/api/settings/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ proxyList: list }) }); } catch (e) { } close();
       };
@@ -1511,9 +1517,9 @@
       <td class="col-status">${s.isAvailable ? '<span class="badge bg-success rounded-pill"><i class="bi bi-check-circle me-1"></i>在线</span>' : '<span class="badge bg-danger rounded-pill"><i class="bi bi-x-circle me-1"></i>离线</span>'}</td>
       <td class="col-type"><span class="badge bg-light text-dark border">${streamType(s)}</span></td>
       <td class="col-name" title="${nameEsc}">${nameEsc}</td>
-      <td class="col-resolution">${s.resolution ? '<span class="badge bg-light text-dark border">' + s.resolution + '</span>' : '-'}</td>
-      <td class="col-fps">${s.frameRate ? '<span class="badge bg-light text-dark border">' + s.frameRate + 'fps</span>' : '-'}</td>
-      <td class="col-codec">${s.codec ? '<span class="badge bg-light text-dark border">' + s.codec + '</span>' : '-'}</td>
+      <td class="col-resolution">${s.resolution ? '<span class="badge bg-light text-dark border">' + escapeHTML(s.resolution) + '</span>' : '-'}</td>
+      <td class="col-fps">${s.frameRate ? '<span class="badge bg-light text-dark border">' + escapeHTML(String(s.frameRate)) + 'fps</span>' : '-'}</td>
+      <td class="col-codec">${s.codec ? '<span class="badge bg-light text-dark border">' + escapeHTML(s.codec) + '</span>' : '-'}</td>
       <td class="col-group"><span class="badge" style="${groupBadgeStyle(s.groupTitle || '-')}">${groupEsc}</span></td>
       <td class="col-logo">${s.logo ? '<img src="' + escapeHTML(s.logo) + '" class="logo-img" onerror="if(!this.dataset.err){this.dataset.err=1;this.src=\'/api/proxy/stream?url=\'+encodeURIComponent(this.src);}">' : '<div class="logo-img d-flex align-items-center justify-content-center text-muted"><i class="bi bi-tv"></i></div>'}</td>
       <td class="col-addr" title="${displayAddrEsc}">${displayAddrEsc}</td>
@@ -2247,7 +2253,7 @@
             var urlEl = document.getElementById('epgPlayUrlR'); var openEl = document.getElementById('epgOpenR'); var v = document.getElementById('epgPlayerR');
             if (x && x.success && x.url) {
               var raw = x.url;
-              var isM3u8 = /\\.m3u8(\\?|$)/i.test(raw) || raw.includes('m3u8');
+              var isM3u8 = /\.m3u8(\?|$)/i.test(raw) || raw.includes('m3u8');
               var playUrl = isM3u8 ? ('/api/proxy/hls?url=' + encodeURIComponent(raw)) : ('/api/proxy/stream?url=' + encodeURIComponent(raw));
               urlEl.value = raw; openEl.href = playUrl;
               if (isM3u8 && window.Hls && window.Hls.isSupported()) {
@@ -2992,6 +2998,27 @@
     </div>
 
     <script>
+      // CSRF 保护：全局拦截 fetch，为非 GET 请求添加 X-Requested-With 标头
+      (function () {
+        const _fetch = window.fetch;
+        window.fetch = function (url, opts) {
+          opts = opts || {};
+          const method = (opts.method || 'GET').toUpperCase();
+          if (method !== 'GET' && method !== 'HEAD') {
+            opts.headers = opts.headers || {};
+            if (opts.headers instanceof Headers) {
+              if (!opts.headers.has('X-Requested-With')) opts.headers.set('X-Requested-With', 'XMLHttpRequest');
+            } else {
+              if (!opts.headers['X-Requested-With']) opts.headers['X-Requested-With'] = 'XMLHttpRequest';
+            }
+          }
+          return _fetch.call(this, url, opts);
+        };
+      })();
+      // 更新提示
+      function doUpdate() {
+        alert('请在服务器执行以下命令更新：\ndocker-compose pull && docker-compose up -d');
+      }
       async function doLogout() {
         await fetch('/api/logout', { method: 'POST' });
         window.location.href = '/login.html';

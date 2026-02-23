@@ -24,7 +24,7 @@ function requireAuth(req, res, next) {
     }
 
     // 4. 页面请求重定向到登录页
-    const protectedPages = ['/', '/index.html', '/results', '/results.html'];
+    const protectedPages = ['/', '/index.html', '/results', '/results.html', '/player.html'];
     if (protectedPages.includes(req.path)) {
         return res.redirect('/login.html');
     }

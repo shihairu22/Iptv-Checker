@@ -28,7 +28,7 @@ app.use(cors({
     origin: '*',
     credentials: false
 }));
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: '5mb' }));
 app.use(cookieParser());
 
 // 请求日志中间件
@@ -117,7 +117,7 @@ async function startServer() {
                 response.data.pipe(res);
                 res.on('close', () => { if (response.data.destroy) response.data.destroy(); });
             } catch (e) {
-                res.status(500).send('Proxy error: ' + e.message);
+                res.status(502).send('Proxy error');
             }
         });
 
@@ -136,7 +136,7 @@ async function startServer() {
                 response.data.pipe(res);
                 res.on('close', () => { if (response.data.destroy) response.data.destroy(); });
             } catch (e) {
-                res.status(500).send('Proxy error: ' + e.message);
+                res.status(502).send('Proxy error');
             }
         });
 
@@ -156,7 +156,7 @@ async function startServer() {
 
         // 全局错误处理
 
-        // 7. 远程文件抓取（前端“从网络加载 m3u/txt”功能）
+        // 9. 远程文件抓取（前端"从网络加载 m3u/txt"功能）
         app.post('/api/fetch-text', async (req, res) => {
             const { urls } = req.body;
             if (!Array.isArray(urls) || urls.length === 0) {
@@ -167,11 +167,15 @@ async function startServer() {
                 if (typeof url !== 'string' || (!url.startsWith('http://') && !url.startsWith('https://'))) {
                     return { url, ok: false, error: 'Invalid URL' };
                 }
+                // SSRF 防护：禁止请求本地回环和链路本地地址
+                if (!isUrlSafe(url)) {
+                    return { url, ok: false, error: 'URL not allowed' };
+                }
                 try {
                     const resp = await axios.get(url, { timeout: 15000, responseType: 'text', maxContentLength: 5 * 1024 * 1024 });
                     return { url, ok: true, text: resp.data };
                 } catch (e) {
-                    return { url, ok: false, error: e.message };
+                    return { url, ok: false, error: 'Fetch failed' };
                 }
             }));
             res.json({ success: true, results: results.map(r => r.value || r.reason) });

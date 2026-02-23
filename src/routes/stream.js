@@ -26,11 +26,16 @@ router.post('/check-stream', async (req, res) => {
     try {
         // 使用 Promise 包装 ffprobeCheck 以支持 async/await
         const data = await new Promise((resolve, reject) => {
+            let cp = null;
             const timeoutHandle = setTimeout(() => {
+                // 超时时确保子进程被 kill
+                if (cp && typeof cp.kill === 'function') {
+                    try { cp.kill(); } catch (_) { }
+                }
                 reject(new Error('检测超时 (20s)'));
             }, 21000);
 
-            ffprobeCheck(fullUrl, (data) => {
+            cp = ffprobeCheck(fullUrl, (data) => {
                 clearTimeout(timeoutHandle);
                 resolve(data);
             });
@@ -73,6 +78,49 @@ router.delete('/stream/:index', (req, res) => {
 router.delete('/streams', async (req, res) => {
     await streamService.clearStreams();
     res.json({ success: true });
+});
+// 更新单条流信息（按 udpxyUrl + multicastUrl 查找）
+router.post('/stream/update', (req, res) => {
+    const { udpxyUrl, multicastUrl, update } = req.body;
+    if (!update || typeof update !== 'object') {
+        return res.json({ success: false, message: '缺少 update 参数' });
+    }
+    const streams = streamService.getStreams();
+    const idx = streams.findIndex(s => s.udpxyUrl === udpxyUrl && s.multicastUrl === multicastUrl);
+    if (idx >= 0) {
+        // 只允许更新安全字段
+        const allowed = ['name', 'groupTitle', 'logo', 'tvgId', 'tvgName', 'httpParam', 'catchupBase'];
+        const safeUpdate = {};
+        for (const key of allowed) {
+            if (update[key] !== undefined) safeUpdate[key] = update[key];
+        }
+        streamService.updateStream(idx, safeUpdate);
+        streamService.save();
+        res.json({ success: true });
+    } else {
+        res.json({ success: false, message: '未找到对应的流' });
+    }
+});
+
+// 批量设置 FCC 参数
+router.post('/set-fcc', (req, res) => {
+    const { fcc } = req.body;
+    if (!fcc || typeof fcc !== 'string') {
+        return res.json({ success: false, message: '缺少 fcc 参数' });
+    }
+    const streams = streamService.getStreams();
+    let count = 0;
+    streams.forEach((s, idx) => {
+        // 仅设置组播流的 httpParam
+        const url = (s.multicastUrl || '').trim();
+        const isMulticast = !!s.udpxyUrl || /^(rtp|udp):\/\//i.test(url);
+        if (isMulticast) {
+            streamService.updateStream(idx, { httpParam: `fcc=${fcc}` });
+            count++;
+        }
+    });
+    streamService.save();
+    res.json({ success: true, count });
 });
 
 module.exports = router;

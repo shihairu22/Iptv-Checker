@@ -27,7 +27,7 @@ let PQueue;
                 this.concurrency = (opts && opts.concurrency) || 1;
                 this.autoStart = (opts && opts.autoStart) !== false;
             }
-            add(fn) { fn(); return Promise.resolve(); }
+            add(fn) { return Promise.resolve().then(fn); }
             pause() { }
             clear() { }
             start() { }
@@ -460,7 +460,9 @@ class TaskManager extends EventEmitter {
             this.saveState();
         }
 
-        if (this.task.finished >= this.task.total) {
+        // 防止并发队列中多个 item 同时完成导致 finishTask 被重复调用
+        if (this.task.finished >= this.task.total && this.task.running) {
+            this.task.running = false; // 原子标记，阻止后续重入
             this.finishTask();
         }
     }

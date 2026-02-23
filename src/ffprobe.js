@@ -3,6 +3,7 @@ const { execFile } = require('child_process');
 // 缓存检测结果
 const streamCache = new Map();
 const CACHE_DURATION = 5 * 60 * 1000; // 5分钟缓存
+const MAX_CACHE_SIZE = 5000; // 最大缓存条目数
 const inFlight = new Map();
 
 function ffprobeCheck(fullUrl, callback) {
@@ -10,12 +11,13 @@ function ffprobeCheck(fullUrl, callback) {
     const now = Date.now();
     const cached = streamCache.get(fullUrl);
     if (cached && (now - cached.timestamp) < CACHE_DURATION) {
-        return callback(cached.data);
+        callback(cached.data);
+        return null; // 无子进程
     }
 
     if (inFlight.has(fullUrl)) {
         inFlight.get(fullUrl).push(callback);
-        return;
+        return null; // 无子进程，复用已有的请求
     }
     inFlight.set(fullUrl, [callback]);
 
@@ -113,6 +115,11 @@ function ffprobeCheck(fullUrl, callback) {
             audioSampleRate: audio_sample_rate,
             raw
         };
+        // 缓存上限清理
+        if (streamCache.size >= MAX_CACHE_SIZE) {
+            const keys = Array.from(streamCache.keys());
+            keys.slice(0, 1000).forEach(k => streamCache.delete(k));
+        }
         streamCache.set(fullUrl, { data: result, timestamp: Date.now() });
         const callbacks = inFlight.get(fullUrl) || [];
         inFlight.delete(fullUrl);
