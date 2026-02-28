@@ -4,46 +4,75 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IPTV 播放器</title>
-    <style>body,html{margin:0;padding:0;width:100%;height:100%;background-color:#000;overflow:hidden}#dplayer{width:100%;height:100%}</style>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.0/dist/hls.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/dplayer@1.27.1/dist/DPlayer.min.js"></script>
+    <style>
+        body,html{margin:0;padding:0;width:100%;height:100%;background-color:#000;overflow:hidden}
+        #playerWrap{width:100%;height:100%;position:relative;background:#000}
+        #video{width:100%;height:100%;background:#000}
+        #msg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#fff;font-size:20px;display:none;text-align:center;padding:12px 16px;background:rgba(0,0,0,.45);border-radius:8px}
+    </style>
+    <script src="/vendor/hls.js/hls.min.js"></script>
+    <script src="/vendor/mpegts.js/mpegts.min.js"></script>
 </head>
 <body>
-    <div id="dplayer"></div>
+    <div id="playerWrap">
+        <video id="video" controls autoplay playsinline></video>
+        <div id="msg"></div>
+    </div>
     <script>
         (function() {
             const urlParams = new URLSearchParams(window.location.search);
             const rawUrl = urlParams.get('url');
             const title = urlParams.get('title') || 'IPTV 直播';
-            if (!rawUrl) { document.body.innerHTML = '<div style="color:white;text-align:center;padding-top:20%;font-size:24px;">无效的播放地址</div>'; return; }
+            const video = document.getElementById('video');
+            const msg = document.getElementById('msg');
+
+            function showMsg(text) {
+                msg.textContent = text;
+                msg.style.display = 'block';
+            }
+
+            if (!rawUrl) { showMsg('无效的播放地址'); return; }
+            if (!rawUrl.startsWith('/api/proxy/')) { showMsg('仅支持代理播放'); return; }
             document.title = title;
-            let type = 'auto';
-            if (rawUrl.includes('.m3u8') || rawUrl.includes('/hls')) type = 'hls';
-            else if (rawUrl.includes('.ts') || rawUrl.includes('/stream') || rawUrl.includes('mpegts')) type = 'flv';
-            console.log('播放:', rawUrl, type);
-            const dp = new DPlayer({
-                container: document.getElementById('dplayer'),
-                live: true, autoplay: true, screenshot: true,
-                video: {
-                    url: rawUrl, type: type,
-                    customType: {
-                        'flv': function (video, player) {
-                            if (mpegts.getFeatureList().mseLivePlayback) {
-                                const mpegtsPlayer = mpegts.createPlayer({ type: 'mpegts', isLive: true, url: video.src, enableStashBuffer: false, liveBufferLatencyChasing: true });
-                                mpegtsPlayer.attachMediaElement(video);
-                                mpegtsPlayer.load();
-                                player.events.on('destroy', () => mpegtsPlayer.destroy());
-                            }
-                        },
-                        'hls': function (video, player) {
-                             if (Hls.isSupported()) {
-                                const hls = new Hls(); hls.loadSource(video.src); hls.attachMedia(video);
-                                player.events.on('destroy', () => hls.destroy());
-                            } else if (video.canPlayType('application/vnd.apple.mpegurl')) { video.src = video.src; }
-                        }
-                    }
+            const isHls = rawUrl.includes('.m3u8') || rawUrl.includes('/hls');
+            let hlsPlayer = null;
+            let mpegtsPlayer = null;
+
+            if (isHls) {
+                if (window.Hls && Hls.isSupported()) {
+                    hlsPlayer = new Hls();
+                    hlsPlayer.loadSource(rawUrl);
+                    hlsPlayer.attachMedia(video);
+                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    video.src = rawUrl;
+                } else {
+                    showMsg('当前浏览器不支持 HLS 播放');
+                    return;
                 }
+            } else {
+                if (window.mpegts && mpegts.getFeatureList().mseLivePlayback) {
+                    mpegtsPlayer = mpegts.createPlayer({
+                        type: 'mpegts',
+                        isLive: true,
+                        url: rawUrl,
+                        enableStashBuffer: false,
+                        liveBufferLatencyChasing: true
+                    });
+                    mpegtsPlayer.attachMediaElement(video);
+                    mpegtsPlayer.load();
+                } else {
+                    video.src = rawUrl;
+                }
+            }
+
+            video.play().catch(() => {});
+            video.addEventListener('error', function () {
+                showMsg('播放失败，请检查代理地址或流状态');
+            });
+
+            window.addEventListener('beforeunload', function () {
+                try { if (hlsPlayer) hlsPlayer.destroy(); } catch (e) {}
+                try { if (mpegtsPlayer) mpegtsPlayer.destroy(); } catch (e) {}
             });
         })();
     </script>

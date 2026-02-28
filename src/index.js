@@ -154,12 +154,66 @@ async function startServer() {
                 const response = await axios({
                     method: 'get',
                     url: streamUrl,
-                    responseType: 'stream',
-                    timeout: 10000
+                    responseType: 'arraybuffer',
+                    timeout: 10000,
+                    headers: {
+                        'User-Agent': 'IPTV-Checker/1.0',
+                        ...(req.headers.range ? { Range: req.headers.range } : {})
+                    },
+                    validateStatus: (s) => s >= 200 && s < 400
                 });
-                res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
-                response.data.pipe(res);
-                res.on('close', () => { if (response.data.destroy) response.data.destroy(); });
+
+                const upstreamType = String(response.headers['content-type'] || '').toLowerCase();
+                const isM3u8 = streamUrl.includes('.m3u8') || upstreamType.includes('mpegurl') || upstreamType.includes('vnd.apple.mpegurl');
+
+                if (isM3u8) {
+                    const text = Buffer.from(response.data).toString('utf8');
+                    const baseUrl = new URL(streamUrl);
+
+                    const toProxyUrl = (absUrl) => {
+                        const isPlaylist = /\.m3u8($|\?)/i.test(absUrl);
+                        const endpoint = isPlaylist ? '/api/proxy/hls' : '/api/proxy/stream';
+                        return `${endpoint}?url=${encodeURIComponent(absUrl)}`;
+                    };
+
+                    const rewriteUri = (uri) => {
+                        const trimmed = uri.trim();
+                        if (!trimmed || trimmed.startsWith('#')) return uri;
+                        if (/^(data:|blob:|javascript:)/i.test(trimmed)) return uri;
+                        let absolute;
+                        try {
+                            absolute = new URL(trimmed, baseUrl).toString();
+                        } catch (_) {
+                            return uri;
+                        }
+                        if (!isUrlSafe(absolute, { allowPrivate: true })) return uri;
+                        return toProxyUrl(absolute);
+                    };
+
+                    const rewritten = text
+                        .split(/\r?\n/)
+                        .map((line) => {
+                            const keyMatch = line.match(/^(#EXT-X-KEY:.*URI=")([^"]+)(".*)$/i);
+                            if (keyMatch) {
+                                const replaced = rewriteUri(keyMatch[2]);
+                                return `${keyMatch[1]}${replaced}${keyMatch[3]}`;
+                            }
+                            if (line.startsWith('#')) return line;
+                            return rewriteUri(line);
+                        })
+                        .join('\n');
+
+                    res.status(response.status);
+                    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+                    res.send(rewritten);
+                    return;
+                }
+
+                res.status(response.status);
+                if (response.headers['content-type']) res.setHeader('Content-Type', response.headers['content-type']);
+                if (response.headers['content-length']) res.setHeader('Content-Length', response.headers['content-length']);
+                if (response.headers['accept-ranges']) res.setHeader('Accept-Ranges', response.headers['accept-ranges']);
+                res.end(Buffer.from(response.data));
             } catch (e) {
                 res.status(502).send('Proxy error');
             }
