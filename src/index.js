@@ -114,12 +114,13 @@ async function startServer() {
             return false;
         }
 
-        function isUrlSafe(urlStr) {
+        function isUrlSafe(urlStr, options = {}) {
+            const { allowPrivate = false } = options;
             try {
                 const u = new URL(urlStr);
                 if (!['http:', 'https:'].includes(u.protocol)) return false;
                 const host = u.hostname;
-                if (isPrivateIp(host)) return false;
+                if (!allowPrivate && isPrivateIp(host)) return false;
                 return true;
             } catch (e) {
                 return false;
@@ -128,7 +129,7 @@ async function startServer() {
         app.get('/api/proxy/stream', async (req, res) => {
             const streamUrl = req.query.url;
             if (!streamUrl) return res.status(400).send('Missing url');
-            if (!isUrlSafe(streamUrl)) return res.status(403).send('URL not allowed');
+            if (!isUrlSafe(streamUrl, { allowPrivate: true })) return res.status(403).send('URL not allowed');
             try {
                 const response = await axios({
                     method: 'get',
@@ -148,7 +149,7 @@ async function startServer() {
         app.get('/api/proxy/hls', async (req, res) => {
             const streamUrl = req.query.url;
             if (!streamUrl) return res.status(400).send('Missing url');
-            if (!isUrlSafe(streamUrl)) return res.status(403).send('URL not allowed');
+            if (!isUrlSafe(streamUrl, { allowPrivate: true })) return res.status(403).send('URL not allowed');
             try {
                 const response = await axios({
                     method: 'get',
