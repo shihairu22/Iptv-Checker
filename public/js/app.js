@@ -29,6 +29,7 @@ let selectedSet = new Set();
 let pageSize = 20;
 let currentPage = 1;
 let filterStatus = 'online';
+let filterResolution = 'all';
 let isDockerEnv = false;
 
 // 图表与 Socket 实例
@@ -399,6 +400,9 @@ function updateStatsAndDisplay() {
     }
     if (filterStatus === 'online') filtered = filtered.filter(s => s.isAvailable);
     if (filterStatus === 'offline') filtered = filtered.filter(s => !s.isAvailable);
+    if (filterResolution !== 'all') {
+        filtered = filtered.filter(s => matchResolutionFilter(s?.resolution, filterResolution));
+    }
 
     const online = filtered.filter(s => s.isAvailable);
     const offline = filtered.filter(s => !s.isAvailable);
@@ -432,6 +436,18 @@ function updateStatsAndDisplay() {
 
     // 更新分页控件
     updatePaginationControls(sizeVal, total, pages);
+}
+
+function matchResolutionFilter(resolution, type) {
+    const text = String(resolution || '').toLowerCase().trim();
+    const m = text.match(/(\d{3,4})\s*[x×]\s*(\d{3,4})/i);
+    const h = m ? Math.max(Number(m[1]), Number(m[2])) : 0;
+
+    if (type === '4k') return h >= 2160 || /2160|4k|uhd/.test(text);
+    if (type === '1080') return (h >= 1080 && h < 2160) || /1080|fhd/.test(text);
+    if (type === '720') return (h >= 720 && h < 1080) || /720/.test(text);
+    if (type === 'sd') return (h > 0 && h < 720) || /480|576|540|sd/.test(text);
+    return true;
 }
 
 
@@ -820,11 +836,32 @@ function bindUIEvents() {
     if (btnOnline) btnOnline.onclick = function () { filterStatus = 'online'; updateFilterActive('online'); updateStatsAndDisplay(); };
     if (btnOffline) btnOffline.onclick = function () { filterStatus = 'offline'; updateFilterActive('offline'); updateStatsAndDisplay(); };
 
+    const btnResAll = document.getElementById('filterResAll');
+    const btnRes4k = document.getElementById('filterRes4k');
+    const btnRes1080 = document.getElementById('filterRes1080');
+    const btnRes720 = document.getElementById('filterRes720');
+    const btnResSd = document.getElementById('filterResSd');
+
+    if (btnResAll) btnResAll.onclick = function () { filterResolution = 'all'; updateResolutionFilterActive('all'); updateStatsAndDisplay(); };
+    if (btnRes4k) btnRes4k.onclick = function () { filterResolution = '4k'; updateResolutionFilterActive('4k'); updateStatsAndDisplay(); };
+    if (btnRes1080) btnRes1080.onclick = function () { filterResolution = '1080'; updateResolutionFilterActive('1080'); updateStatsAndDisplay(); };
+    if (btnRes720) btnRes720.onclick = function () { filterResolution = '720'; updateResolutionFilterActive('720'); updateStatsAndDisplay(); };
+    if (btnResSd) btnResSd.onclick = function () { filterResolution = 'sd'; updateResolutionFilterActive('sd'); updateStatsAndDisplay(); };
+
     function updateFilterActive(status) {
         [btnAll, btnOnline, btnOffline].forEach(btn => btn?.classList.remove('active'));
         if (status === 'all') btnAll?.classList.add('active');
         if (status === 'online') btnOnline?.classList.add('active');
         if (status === 'offline') btnOffline?.classList.add('active');
+    }
+
+    function updateResolutionFilterActive(type) {
+        [btnResAll, btnRes4k, btnRes1080, btnRes720, btnResSd].forEach(btn => btn?.classList.remove('active'));
+        if (type === 'all') btnResAll?.classList.add('active');
+        if (type === '4k') btnRes4k?.classList.add('active');
+        if (type === '1080') btnRes1080?.classList.add('active');
+        if (type === '720') btnRes720?.classList.add('active');
+        if (type === 'sd') btnResSd?.classList.add('active');
     }
 
     // 清空按钮

@@ -296,10 +296,19 @@
             </div>
 
             <div class="bg-light p-3 rounded-3 mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
-                <div class="btn-group">
-                    <button class="btn btn-outline-secondary" id="filterAll">全部</button>
-                    <button class="btn btn-outline-success active" id="filterOnline">在线</button>
-                    <button class="btn btn-outline-danger" id="filterOffline">离线</button>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <div class="btn-group">
+                        <button class="btn btn-outline-secondary" id="filterAll">全部</button>
+                        <button class="btn btn-outline-success active" id="filterOnline">在线</button>
+                        <button class="btn btn-outline-danger" id="filterOffline">离线</button>
+                    </div>
+                    <div class="btn-group" id="resolutionFilters">
+                        <button class="btn btn-outline-primary active" id="filterResAll">分辨率: 全部</button>
+                        <button class="btn btn-outline-primary" id="filterRes4k">4K</button>
+                        <button class="btn btn-outline-primary" id="filterRes1080">1080P</button>
+                        <button class="btn btn-outline-primary" id="filterRes720">720P</button>
+                        <button class="btn btn-outline-primary" id="filterResSd">SD</button>
+                    </div>
                 </div>
 
                 <div class="d-flex align-items-center gap-3">
