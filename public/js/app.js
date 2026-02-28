@@ -393,16 +393,7 @@ function renderCharts(stats) {
 }
 
 function updateStatsAndDisplay() {
-    const search = lastSearch.trim().toLowerCase();
-    let filtered = allStreams;
-    if (search) {
-        filtered = allStreams.filter(s => (s.name || '').toLowerCase().includes(search) || (s.multicastUrl || '').toLowerCase().includes(search));
-    }
-    if (filterStatus === 'online') filtered = filtered.filter(s => s.isAvailable);
-    if (filterStatus === 'offline') filtered = filtered.filter(s => !s.isAvailable);
-    if (filterResolution !== 'all') {
-        filtered = filtered.filter(s => matchResolutionFilter(s?.resolution, filterResolution));
-    }
+    const filtered = getFilteredStreams();
 
     const online = filtered.filter(s => s.isAvailable);
     const offline = filtered.filter(s => !s.isAvailable);
@@ -436,6 +427,20 @@ function updateStatsAndDisplay() {
 
     // 更新分页控件
     updatePaginationControls(sizeVal, total, pages);
+}
+
+function getFilteredStreams() {
+    const search = lastSearch.trim().toLowerCase();
+    let filtered = allStreams;
+    if (search) {
+        filtered = allStreams.filter(s => (s.name || '').toLowerCase().includes(search) || (s.multicastUrl || '').toLowerCase().includes(search));
+    }
+    if (filterStatus === 'online') filtered = filtered.filter(s => s.isAvailable);
+    if (filterStatus === 'offline') filtered = filtered.filter(s => !s.isAvailable);
+    if (filterResolution !== 'all') {
+        filtered = filtered.filter(s => matchResolutionFilter(s?.resolution, filterResolution));
+    }
+    return filtered;
 }
 
 function matchResolutionFilter(resolution, type) {
@@ -710,13 +715,15 @@ function exportData(format) {
         return;
     }
 
-    let exportList = allStreams;
-    if (filterStatus === 'online') exportList = allStreams.filter(s => s.isAvailable);
-    if (filterStatus === 'offline') exportList = allStreams.filter(s => !s.isAvailable);
+    let exportList = getFilteredStreams();
+    if (!exportList.length) {
+        showCenterConfirm('当前筛选条件下没有可导出的数据', null, true);
+        return;
+    }
 
     let content = '';
     const dateStr = new Date().toISOString().replace(/T/, '_').replace(/:/g, '').split('.')[0];
-    const filename = `streams_${filterStatus}_${dateStr}.${format}`;
+    const filename = `streams_${filterStatus}_${filterResolution}_${dateStr}.${format}`;
 
     if (format === 'm3u') {
         content = '#EXTM3U\n';
