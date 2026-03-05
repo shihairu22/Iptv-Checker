@@ -139,7 +139,7 @@ router.post('/stream/update', async (req, res) => {
         const safeUpdate = {};
         for (const key of allowed) {
             const value = normalizeUpdateValue(key, update[key]);
-            if (value !== undefined && value !== '') safeUpdate[key] = value;
+            if (value !== undefined) safeUpdate[key] = value;
         }
         streamService.updateStream(idx, safeUpdate);
         const saved = await streamService.save();

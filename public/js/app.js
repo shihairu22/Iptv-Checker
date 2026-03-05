@@ -316,6 +316,59 @@ async function deleteStream(index) {
     });
 }
 
+async function editStream(index) {
+    const stream = allStreams[index];
+    if (!stream) {
+        showCenterConfirm('未找到频道数据，请刷新后重试', null, true);
+        return;
+    }
+
+    const name = window.prompt('频道名称', stream.name || '');
+    if (name === null) return;
+    const groupTitle = window.prompt('分组名称', stream.groupTitle || '');
+    if (groupTitle === null) return;
+    const logo = window.prompt('Logo 地址', stream.logo || '');
+    if (logo === null) return;
+    const tvgId = window.prompt('EPG ID (tvgId)', stream.tvgId || '');
+    if (tvgId === null) return;
+    const tvgName = window.prompt('EPG 名称 (tvgName)', stream.tvgName || '');
+    if (tvgName === null) return;
+    const httpParam = window.prompt('HTTP 参数 (如 fcc=10.0.0.1)', stream.httpParam || '');
+    if (httpParam === null) return;
+    const catchupBase = window.prompt('回看地址 (catchupBase)', stream.catchupBase || '');
+    if (catchupBase === null) return;
+
+    try {
+        const response = await fetch('/api/stream/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                udpxyUrl: stream.udpxyUrl || '',
+                multicastUrl: stream.multicastUrl || '',
+                update: {
+                    name,
+                    groupTitle,
+                    logo,
+                    tvgId,
+                    tvgName,
+                    httpParam,
+                    catchupBase
+                }
+            })
+        });
+        const data = await response.json();
+        if (data.success) {
+            showCenterConfirm('频道已更新', null, true);
+            getStreams();
+        } else {
+            showCenterConfirm('更新失败: ' + (data.message || '未知错误'), null, true);
+        }
+    } catch (error) {
+        console.error(error);
+        showCenterConfirm('更新失败，请检查网络或服务状态', null, true);
+    }
+}
+
 // --- 数据展示与图表 ---
 
 async function initDashboard() {
@@ -500,6 +553,9 @@ function renderStreamsList(arr) {
                 <i class="bi bi-play-fill"></i>
             </button>
         </div>
+        <button class="btn btn-sm btn-outline-primary btn-edit-stream" data-edit-index="${index}" title="编辑">
+            <i class="bi bi-pencil-square"></i> <span class="d-none d-md-inline">编辑</span>
+        </button>
         <button class="btn btn-sm btn-outline-danger btn-delete-stream" data-delete-index="${index}" title="删除">
             <i class="bi bi-trash"></i> <span class="d-none d-md-inline">删除</span>
         </button>
@@ -580,6 +636,16 @@ function bindListEvents() {
             const index = Number(this.dataset.deleteIndex);
             if (!Number.isNaN(index)) {
                 deleteStream(index);
+            }
+        };
+    });
+
+    const editBtns = Array.from(document.querySelectorAll('.btn-edit-stream'));
+    editBtns.forEach(btn => {
+        btn.onclick = function () {
+            const index = Number(this.dataset.editIndex);
+            if (!Number.isNaN(index)) {
+                editStream(index);
             }
         };
     });
