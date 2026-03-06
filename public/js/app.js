@@ -31,6 +31,7 @@ let currentPage = 1;
 let filterStatus = 'online';
 let filterResolution = 'all';
 let isDockerEnv = false;
+let editingStreamIndex = -1;
 
 // 图表与 Socket 实例
 let statusChartInstance = null;
@@ -323,20 +324,52 @@ async function editStream(index) {
         return;
     }
 
-    const name = window.prompt('频道名称', stream.name || '');
-    if (name === null) return;
-    const groupTitle = window.prompt('分组名称', stream.groupTitle || '');
-    if (groupTitle === null) return;
-    const logo = window.prompt('Logo 地址', stream.logo || '');
-    if (logo === null) return;
-    const tvgId = window.prompt('EPG ID (tvgId)', stream.tvgId || '');
-    if (tvgId === null) return;
-    const tvgName = window.prompt('EPG 名称 (tvgName)', stream.tvgName || '');
-    if (tvgName === null) return;
-    const httpParam = window.prompt('HTTP 参数 (如 fcc=10.0.0.1)', stream.httpParam || '');
-    if (httpParam === null) return;
-    const catchupBase = window.prompt('回看地址 (catchupBase)', stream.catchupBase || '');
-    if (catchupBase === null) return;
+    editingStreamIndex = index;
+    const setValue = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.value = val || '';
+    };
+
+    setValue('editStreamName', stream.name || '');
+    setValue('editStreamGroupTitle', stream.groupTitle || '');
+    setValue('editStreamLogo', stream.logo || '');
+    setValue('editStreamTvgId', stream.tvgId || '');
+    setValue('editStreamTvgName', stream.tvgName || '');
+    setValue('editStreamHttpParam', stream.httpParam || '');
+    setValue('editStreamCatchupBase', stream.catchupBase || '');
+    setValue('editStreamUdpxyUrl', stream.udpxyUrl || '');
+    setValue('editStreamMulticastUrl', stream.multicastUrl || '');
+
+    const modalEl = document.getElementById('editStreamModal');
+    if (!modalEl || !window.bootstrap) {
+        showCenterConfirm('编辑弹窗初始化失败，请刷新页面重试', null, true);
+        return;
+    }
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+}
+
+async function saveEditedStream() {
+    if (editingStreamIndex < 0 || editingStreamIndex >= allStreams.length) {
+        showCenterConfirm('当前编辑对象无效，请重新打开编辑窗口', null, true);
+        return;
+    }
+
+    const stream = allStreams[editingStreamIndex];
+    const getValue = (id) => {
+        const el = document.getElementById(id);
+        return el ? el.value : '';
+    };
+
+    const payload = {
+        name: getValue('editStreamName'),
+        groupTitle: getValue('editStreamGroupTitle'),
+        logo: getValue('editStreamLogo'),
+        tvgId: getValue('editStreamTvgId'),
+        tvgName: getValue('editStreamTvgName'),
+        httpParam: getValue('editStreamHttpParam'),
+        catchupBase: getValue('editStreamCatchupBase')
+    };
 
     try {
         const response = await fetch('/api/stream/update', {
@@ -345,19 +378,16 @@ async function editStream(index) {
             body: JSON.stringify({
                 udpxyUrl: stream.udpxyUrl || '',
                 multicastUrl: stream.multicastUrl || '',
-                update: {
-                    name,
-                    groupTitle,
-                    logo,
-                    tvgId,
-                    tvgName,
-                    httpParam,
-                    catchupBase
-                }
+                update: payload
             })
         });
         const data = await response.json();
         if (data.success) {
+            const modalEl = document.getElementById('editStreamModal');
+            if (modalEl && window.bootstrap) {
+                const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                modal.hide();
+            }
             showCenterConfirm('频道已更新', null, true);
             getStreams();
         } else {
@@ -899,6 +929,13 @@ function bindUIEvents() {
             lastSearch = this.value;
             updateStatsAndDisplay();
         });
+    }
+
+    const saveEditStreamBtn = document.getElementById('saveEditStreamBtn');
+    if (saveEditStreamBtn) {
+        saveEditStreamBtn.onclick = function () {
+            saveEditedStream();
+        };
     }
 
     // 筛选按钮

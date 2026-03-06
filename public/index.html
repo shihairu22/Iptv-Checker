@@ -403,6 +403,61 @@
         </div>
     </div>
 
+    <div class="modal fade" id="editStreamModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">编辑频道</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">频道名称</label>
+                            <input type="text" class="form-control" id="editStreamName">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">分组名称</label>
+                            <input type="text" class="form-control" id="editStreamGroupTitle">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Logo 地址</label>
+                            <input type="text" class="form-control" id="editStreamLogo">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">EPG ID (tvgId)</label>
+                            <input type="text" class="form-control" id="editStreamTvgId">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">EPG 名称 (tvgName)</label>
+                            <input type="text" class="form-control" id="editStreamTvgName">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">HTTP 参数</label>
+                            <input type="text" class="form-control" id="editStreamHttpParam" placeholder="如 fcc=10.0.0.1">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">回看地址 (catchupBase)</label>
+                            <input type="text" class="form-control" id="editStreamCatchupBase">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">UDPXY 地址（只读）</label>
+                            <input type="text" class="form-control" id="editStreamUdpxyUrl" readonly>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">组播地址（只读）</label>
+                            <input type="text" class="form-control" id="editStreamMulticastUrl" readonly>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="saveEditStreamBtn">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 底部版本信息 -->
     <footer class="footer mt-auto py-3 bg-white border-top shadow-sm">
         <div class="container text-center">
