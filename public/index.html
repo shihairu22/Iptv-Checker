@@ -194,6 +194,26 @@
                                     </div>
                                 </div>
 
+                                <div class="row g-2 mb-3 align-items-end">
+                                    <div class="col-auto">
+                                        <div class="form-check form-switch mt-3">
+                                            <input class="form-check-input" type="checkbox" id="throttleEnable">
+                                            <label class="form-check-label small text-muted" for="throttleEnable">节流调度</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-3" id="throttleRunWrap" style="display:none">
+                                        <label class="form-label small text-muted">扫描时长(分)</label>
+                                        <input type="number" class="form-control" id="throttleRun" min="1" max="1440" value="30" placeholder="30">
+                                    </div>
+                                    <div class="col-3" id="throttlePauseWrap" style="display:none">
+                                        <label class="form-label small text-muted">暂停时长(分)</label>
+                                        <input type="number" class="form-control" id="throttlePause" min="1" max="1440" value="10" placeholder="10">
+                                    </div>
+                                    <div class="col" id="throttleCountdownWrap" style="display:none">
+                                        <span class="badge bg-secondary" id="throttleCountdown"></span>
+                                    </div>
+                                </div>
+
                                 <div class="row g-2 mb-3">
                                     <div class="col-6">
                                         <label class="form-label small text-muted">起始地址</label>

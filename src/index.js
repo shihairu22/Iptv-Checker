@@ -63,7 +63,7 @@ process.on('unhandledRejection', (reason, promise) => {
 async function startServer() {
     try {
         await streamService.init();
-        logger.info(`初始化数据加载成功，记录数: ${streamService.getStreams().length}`);
+        logger.info(`初始化数据加载成功，记录数: ${streamService.getStreamsCount()}`);
 
         // 路由挂载开始
         const publicDir = path.join(__dirname, '../public');

@@ -82,6 +82,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // 6. 初始化范围检测预览
     updateRangeSummary();
+
+    // 7. 节流调度开关联动
+    const throttleEnableEl = document.getElementById('throttleEnable');
+    const throttleRunWrap = document.getElementById('throttleRunWrap');
+    const throttlePauseWrap = document.getElementById('throttlePauseWrap');
+    if (throttleEnableEl) {
+        throttleEnableEl.addEventListener('change', function () {
+            const show = this.checked;
+            if (throttleRunWrap) throttleRunWrap.style.display = show ? '' : 'none';
+            if (throttlePauseWrap) throttlePauseWrap.style.display = show ? '' : 'none';
+        });
+    }
 });
 
 // --- Socket.IO 事件 ---
@@ -124,8 +136,20 @@ function updateTaskUI(task) {
 
     if (task.running || task.paused) {
         isTaskPaused = task.paused;
+        // 节流倒计时显示
+        const cdWrap = document.getElementById('throttleCountdownWrap');
+        const cdBadge = document.getElementById('throttleCountdown');
+        if (task.throttle && task.throttle.phase) {
+            const phase = task.throttle.phase === 'run' ? '扫描' : '暂停';
+            const rem = task.throttle.remainingSeconds || 0;
+            const m = Math.floor(rem / 60), s = rem % 60;
+            if (cdBadge) cdBadge.textContent = `[节流] ${phase}中，剩余 ${m}:${String(s).padStart(2,'0')}`;
+            if (cdWrap) cdWrap.style.display = '';
+        } else {
+            if (cdWrap) cdWrap.style.display = 'none';
+        }
         showProgress(task.finished, task.total,
-            task.paused ? `任务暂停 (已完成: ${task.finished}/${task.total}) - 点击“继续检测”恢复` : `正在后台检测: ${task.finished}/${task.total} | 成功: ${task.success} 失败: ${task.fail}`);
+            task.paused ? `任务暂停 (已完成: ${task.finished}/${task.total}) - 点击"继续检测"恢复` : `正在后台检测: ${task.finished}/${task.total} | 成功: ${task.successCount} 失败: ${task.failCount}`);
 
         // 更新按钮状态
         const startBtn = document.getElementById('startDetectBtn');
@@ -144,7 +168,7 @@ function updateTaskUI(task) {
 
     } else {
         if (task.finished > 0 && task.finished === task.total) {
-            showProgress(task.total, task.total, `检测完成 | 总数: ${task.total} 在线: ${task.success} 离线: ${task.fail}`);
+            showProgress(task.total, task.total, `检测完成 | 总数: ${task.total} 在线: ${task.successCount} 离线: ${task.failCount}`);
             getStreams();
         }
 
@@ -234,6 +258,9 @@ async function batchCheckStreams(udpxyUrl, batchText) {
 
     const concurrency = document.getElementById('concurrencySelect') ? document.getElementById('concurrencySelect').value : 10;
     const retry = document.getElementById('retrySelect') ? document.getElementById('retrySelect').value : 0;
+    const throttleEnabled = document.getElementById('throttleEnable')?.checked || false;
+    const throttleRun = parseInt(document.getElementById('throttleRun')?.value) || 30;
+    const throttlePause = parseInt(document.getElementById('throttlePause')?.value) || 10;
 
     try {
         const response = await fetch('/api/task/start', {
@@ -244,7 +271,8 @@ async function batchCheckStreams(udpxyUrl, batchText) {
                 udpxyUrl,
                 batchText,
                 concurrency,
-                retry
+                retry,
+                throttle: { enabled: throttleEnabled, runMinutes: throttleRun, pauseMinutes: throttlePause }
             }),
         });
         const data = await response.json();
@@ -279,6 +307,9 @@ async function rangeCheckStreams(udpxyUrl, startUrl, endUrl) {
 
     const portVal = document.getElementById('portInput')?.value.trim();
     const concurrency = document.getElementById('concurrencySelect') ? document.getElementById('concurrencySelect').value : 10;
+    const throttleEnabled = document.getElementById('throttleEnable')?.checked || false;
+    const throttleRun = parseInt(document.getElementById('throttleRun')?.value) || 30;
+    const throttlePause = parseInt(document.getElementById('throttlePause')?.value) || 10;
 
     try {
         const response = await fetch('/api/task/start', {
@@ -290,7 +321,8 @@ async function rangeCheckStreams(udpxyUrl, startUrl, endUrl) {
                 startUrl,
                 endUrl,
                 ports: portVal,
-                concurrency
+                concurrency,
+                throttle: { enabled: throttleEnabled, runMinutes: throttleRun, pauseMinutes: throttlePause }
             }),
         });
         const data = await response.json();

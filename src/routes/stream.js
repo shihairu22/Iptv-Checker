@@ -32,9 +32,13 @@ function normalizeUpdateValue(key, value) {
     }
 }
 
-// 获取所有流
+// 获取流（支持分页）
 router.get('/streams', (req, res) => {
-    res.json({ success: true, streams: streamService.getStreams() });
+    const offset = Math.max(0, parseInt(req.query.offset) || 0);
+    const limit = Math.min(10000, Math.max(1, parseInt(req.query.limit) || 10000));
+    const streams = streamService.getStreams(offset, limit);
+    const total = streamService.getStreamsCount();
+    res.json({ success: true, streams, total, offset, limit });
 });
 
 // 统计信息
@@ -77,15 +81,8 @@ router.post('/check-stream', async (req, res) => {
             });
         });
 
-        const list = streamService.getStreams();
-        const existingIndex = list.findIndex(item =>
-            String(item.udpxyUrl || '').trim() === udpxyUrl &&
-            String(item.multicastUrl || '').trim() === multicastUrl
-        );
-
-        if (existingIndex !== -1) {
-            streamService.updateStream(existingIndex, data);
-        } else {
+        const found = streamService.updateStreamByUrl(udpxyUrl, multicastUrl, data);
+        if (!found) {
             streamService.addStream({
                 ...data,
                 udpxyUrl,
@@ -107,14 +104,14 @@ router.post('/check-stream', async (req, res) => {
 // 删除单条
 router.delete('/stream/:index', async (req, res) => {
     const idx = parseInt(req.params.index, 10);
-    if (Number.isNaN(idx) || idx < 0 || idx >= streamService.getStreams().length) {
+    if (Number.isNaN(idx) || idx < 0) {
         return res.json({ success: false, message: '删除失败，索引无效' });
     }
     const ok = await streamService.deleteStream(idx);
     if (ok) {
         res.json({ success: true });
     } else {
-        res.status(500).json({ success: false, message: '删除失败，保存异常' });
+        res.status(500).json({ success: false, message: '删除失败，索引超出范围或保存异常' });
     }
 });
 
@@ -131,52 +128,30 @@ router.post('/stream/update', async (req, res) => {
     }
     const safeUdpxyUrl = cleanUrl(String(udpxyUrl || ''));
     const safeMulticastUrl = cleanUrl(String(multicastUrl || ''));
-    const streams = streamService.getStreams();
-    const idx = streams.findIndex(s => s.udpxyUrl === safeUdpxyUrl && s.multicastUrl === safeMulticastUrl);
-    if (idx >= 0) {
-        // 只允许更新安全字段
-        const allowed = ['name', 'groupTitle', 'logo', 'tvgId', 'tvgName', 'httpParam', 'catchupBase'];
-        const safeUpdate = {};
-        for (const key of allowed) {
-            const value = normalizeUpdateValue(key, update[key]);
-            if (value !== undefined) safeUpdate[key] = value;
-        }
-        streamService.updateStream(idx, safeUpdate);
-        const saved = await streamService.save();
-        if (saved) {
-            res.json({ success: true });
-        } else {
-            res.status(500).json({ success: false, message: '保存失败' });
-        }
+    // 只允许更新安全字段
+    const allowed = ['name', 'groupTitle', 'logo', 'tvgId', 'tvgName', 'httpParam', 'catchupBase'];
+    const safeUpdate = {};
+    for (const key of allowed) {
+        const value = normalizeUpdateValue(key, update[key]);
+        if (value !== undefined) safeUpdate[key] = value;
+    }
+    const found = streamService.updateStreamByUrl(safeUdpxyUrl, safeMulticastUrl, safeUpdate);
+    if (found) {
+        res.json({ success: true });
     } else {
         res.json({ success: false, message: '未找到对应的流' });
     }
 });
 
 // 批量设置 FCC 参数
-router.post('/set-fcc', async (req, res) => {
+router.post('/set-fcc', (req, res) => {
     const { fcc } = req.body;
     const safeFcc = cleanText(typeof fcc === 'string' ? fcc : '', 256);
     if (!safeFcc) {
         return res.json({ success: false, message: '缺少 fcc 参数' });
     }
-    const streams = streamService.getStreams();
-    let count = 0;
-    streams.forEach((s, idx) => {
-        // 仅设置组播流的 httpParam
-        const url = (s.multicastUrl || '').trim();
-        const isMulticast = !!s.udpxyUrl || /^(rtp|udp):\/\//i.test(url);
-        if (isMulticast) {
-            streamService.updateStream(idx, { httpParam: `fcc=${safeFcc}` });
-            count++;
-        }
-    });
-    const saved = await streamService.save();
-    if (saved) {
-        res.json({ success: true, count });
-    } else {
-        res.status(500).json({ success: false, message: '保存失败', count });
-    }
+    const count = streamService.setFccForMulticast(safeFcc);
+    res.json({ success: true, count });
 });
 
 module.exports = router;
