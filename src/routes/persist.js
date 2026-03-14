@@ -36,9 +36,9 @@ router.post('/save', async (req, res) => {
 // 加载流数据（触发前端重新拉取）
 router.post('/load', async (req, res) => {
     try {
-        await streamService.init(); // 重新加载内存
-        const list = streamService.getStreams();
-        res.json({ success: true, count: list.length, streams: list });
+        await streamService.init(); // 重新加载设置
+        const count = streamService.getStreamsCount();
+        res.json({ success: true, count });
     } catch (e) {
         console.error(e);
         res.status(500).json({ success: false, message: String(e) });

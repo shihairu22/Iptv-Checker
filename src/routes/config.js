@@ -306,8 +306,8 @@ router.post('/api/settings/update', async (req, res) => {
         settings.globalFcc = cleanText(gf, 256);
         const gfValue = settings.globalFcc;
         const val = gfValue.includes('=') ? gfValue : `fcc=${gfValue}`;
-        // 更新内存中的流列表参数
-        streamService.setStreams(streamService.getStreams().map(s => ({ ...s, httpParam: val })));
+        // 纯 SQL 更新，不加载全量数据到内存
+        streamService.setFccForMulticast(val);
         const ok3 = await streamService.save();
         ok = ok && !!ok3;
     }
@@ -323,19 +323,11 @@ router.post('/api/settings/rename-group', async (req, res) => {
     const fromName = cleanText(from, 64);
     const toName = cleanText(to, 64);
     if (!fromName || !toName) return res.status(400).json({ success: false, message: '缺少分组名称' });
-    let updated = 0;
-    const streams = streamService.getStreams();
-    const newStreams = streams.map(s => {
-        if ((s.groupTitle || '') === fromName) {
-            updated++;
-            return { ...s, groupTitle: toName };
-        }
-        return s;
-    });
-    if (updated > 0) {
-        streamService.setStreams(newStreams);
-        await streamService.save(); // 修复: 确保重命名后持久化
-    }
+    // 纯 SQL 批量更新，不加载全量数据
+    const result = persistence.db.prepare(
+        `UPDATE streams SET data=json_set(data,'$.groupTitle',?) WHERE json_extract(data,'$.groupTitle')=?`
+    ).run(toName, fromName);
+    const updated = result.changes;
     if (Array.isArray(settings.groupTitles)) {
         const idx = settings.groupTitles.findIndex(g => g === fromName);
         if (idx !== -1) settings.groupTitles[idx] = toName;
