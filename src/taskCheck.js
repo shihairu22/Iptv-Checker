@@ -209,10 +209,13 @@ class TaskManager extends EventEmitter {
         return new Promise((resolve) => {
             if (!this.meta.running) { resolve(); return; }
             let fullUrl = item.url;
-            // rtp/udp 组播通过 udpxy 转为 HTTP；rtsp 等其他协议直连
+            // rtp/udp 组播 及 rtsp 均通过 rtp2httpd/udpxy 转为 HTTP
             const rtpMatch = fullUrl.match(/^rtp:?\/+@?(.+)/i);
+            const rtspMatch = fullUrl.match(/^rtsps?:\/+@?(.+)/i);
             if (rtpMatch && item.udpxyUrl)
                 fullUrl = item.udpxyUrl + '/rtp/' + rtpMatch[1];
+            else if (rtspMatch && item.udpxyUrl)
+                fullUrl = item.udpxyUrl + '/rtsp/' + rtspMatch[1];
 
             const maxAttempts = 1 + (parseInt(this.meta.params.retry) || 0);
             let attempts = 0;

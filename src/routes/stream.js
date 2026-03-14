@@ -53,10 +53,13 @@ router.post('/check-stream', async (req, res) => {
     multicastUrl = cleanUrl(String(multicastUrl || ''));
     name = cleanText(String(name || ''), 128);
     let fullUrl = multicastUrl;
-    // rtp/udp 组播通过 udpxy 转为 HTTP；rtsp 等其他协议直连
+    // rtp/udp 组播 及 rtsp 均通过 rtp2httpd/udpxy 转为 HTTP
     const rtpMatch = fullUrl.match(/^rtp:?\/+@?(.+)/i);
+    const rtspMatch = fullUrl.match(/^rtsps?:\/+@?(.+)/i);
     if (rtpMatch && udpxyUrl) {
         fullUrl = `${udpxyUrl}/rtp/${rtpMatch[1]}`;
+    } else if (rtspMatch && udpxyUrl) {
+        fullUrl = `${udpxyUrl}/rtsp/${rtspMatch[1]}`;
     }
 
     // 协议安全校验：仅允许合法的流媒体协议，防止 file:// 等危险协议导致 SSRF
