@@ -182,7 +182,7 @@ function parsePorts(portStr) {
 function parseRtpUrl(u) {
     let s = (u || '').trim();
     // 与后端逻辑同步：移除协议前缀和 @ 符号
-    s = s.replace(/^(rtp|udp):\/\/@?/, '').replace(/^@/, '');
+    s = s.replace(/^(rtp|udp):?\/+@?/i, '').replace(/^@/, '');
 
     const parts = s.split(':');
     if (parts.length > 2) return null;
@@ -277,7 +277,7 @@ function parsePlaylistText(text) {
 
                 const name = parts.join(',').trim();
 
-                if (url && (url.startsWith('rtp://') || url.startsWith('udp://') || url.startsWith('http'))) {
+                if (url && (url.startsWith('rtp://') || url.startsWith('udp://') || url.startsWith('rtsp://') || url.startsWith('rtsps://') || url.startsWith('http'))) {
 
                     items.push({ name, url });
 
@@ -289,7 +289,7 @@ function parsePlaylistText(text) {
 
             // 纯 URL 行
 
-            if (line.startsWith('rtp://') || line.startsWith('udp://') || line.startsWith('http')) {
+            if (line.startsWith('rtp://') || line.startsWith('udp://') || line.startsWith('rtsp://') || line.startsWith('rtsps://') || line.startsWith('http')) {
 
                 items.push({ name: currentName || '未命名频道', url: line, ...currentMeta });
 

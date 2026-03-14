@@ -99,36 +99,9 @@ document.addEventListener('DOMContentLoaded', function () {
 // --- Socket.IO 事件 ---
 socket.on('task:status', updateTaskUI);
 socket.on('task:progress', updateTaskUI);
+socket.on('task:done', updateTaskUI); // 任务完成时后端 emit，触发刷新列表
 socket.on('connect_error', (err) => {
     console.error('Socket 连接失败:', err);
-    // 可选：显示断开连接的 UI 提示
-});
-
-// 优化: 接收增量数据更新
-socket.on('task:update_data', (batch) => {
-    if (!batch || !Array.isArray(batch)) return;
-
-    // 更新本地内存数据
-    // 建立索引映射加速查找
-    const urlMap = new Map();
-    allStreams.forEach((s, i) => {
-        const key = `${s.udpxyUrl}|${s.multicastUrl}`;
-        urlMap.set(key, i);
-    });
-
-    batch.forEach(item => {
-        const key = `${item.udpxyUrl}|${item.multicastUrl}`;
-        if (urlMap.has(key)) {
-            const idx = urlMap.get(key);
-            allStreams[idx] = { ...allStreams[idx], ...item };
-        } else {
-            allStreams.push(item);
-            urlMap.set(key, allStreams.length - 1);
-        }
-    });
-
-    // 刷新显示 (防抖)
-    updateStatsAndDisplay();
 });
 
 function updateTaskUI(task) {
