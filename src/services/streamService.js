@@ -19,17 +19,21 @@ class StreamService {
     }
 
     async init() {
-        const data = await persistence.readJson('streams.json', { streams: [], settings: this.settings });
-        this.multicastList = Array.isArray(data.streams) ? data.streams : [];
-        if (data.settings) {
-            Object.assign(this.settings, data.settings);
+        // 从 SQLite 加载流数据
+        this.multicastList = persistence.getAllStreams();
+        // 从 kv_store 加载 settings
+        const savedSettings = await persistence.readJson('settings', null);
+        if (savedSettings) {
+            Object.assign(this.settings, savedSettings);
         }
     }
 
     async save() {
-        const payload = { streams: this.multicastList, settings: this.settings };
-        // 优化: 日常保存不再生成备份文件，减少 IO
-        return await persistence.writeJson('streams.json', payload);
+        // 流数据走 SQLite streams 表
+        const ok = persistence.saveAllStreams(this.multicastList);
+        // settings 走 kv_store
+        const ok2 = await persistence.writeJson('settings', this.settings);
+        return ok && ok2;
     }
 
     async backupData() {
@@ -44,11 +48,12 @@ class StreamService {
             if (data.settings) {
                 Object.assign(this.settings, data.settings);
             }
-            await this.save(); // Overwrite the main file
+            await this.save();
             return true;
         }
         return false;
     }
+
     getStreams() {
         return this.multicastList;
     }
@@ -60,6 +65,8 @@ class StreamService {
     updateStream(idx, update) {
         if (idx >= 0 && idx < this.multicastList.length) {
             this.multicastList[idx] = { ...this.multicastList[idx], ...update };
+            // 同步更新 SQLite 单条记录
+            persistence.upsertStream(this.multicastList[idx]);
             return true;
         }
         return false;
@@ -67,14 +74,13 @@ class StreamService {
 
     addStream(stream) {
         this.multicastList.push(stream);
+        persistence.upsertStream(stream);
     }
 
-    // [NEW] 批量添加流数据
+    // 批量添加流数据
     async addStreamBatch(newStreams) {
         if (!Array.isArray(newStreams) || newStreams.length === 0) return;
 
-        // 简单的去重逻辑：如果 URL 完全一致则覆盖，否则追加
-        // 为了性能，先建立当前 URL 映射
         const urlMap = new Map();
         this.multicastList.forEach((s, i) => {
             const key = `${s.udpxyUrl}|${s.multicastUrl}`;
@@ -86,14 +92,16 @@ class StreamService {
             if (urlMap.has(key)) {
                 const idx = urlMap.get(key);
                 this.multicastList[idx] = { ...this.multicastList[idx], ...ns };
+                persistence.upsertStream(this.multicastList[idx]);
             } else {
                 this.multicastList.push(ns);
                 urlMap.set(key, this.multicastList.length - 1);
+                persistence.upsertStream(ns);
             }
         });
 
-        // 立即保存
-        await this.save();
+        // settings 也同步保存
+        await persistence.writeJson('settings', this.settings);
     }
 
     getSettings() {
@@ -106,15 +114,19 @@ class StreamService {
 
     async deleteStream(idx) {
         if (idx >= 0 && idx < this.multicastList.length) {
+            const s = this.multicastList[idx];
             this.multicastList.splice(idx, 1);
-            return await this.save();
+            persistence.deleteStream(s.udpxyUrl || '', s.multicastUrl || '');
+            await persistence.writeJson('settings', this.settings);
+            return true;
         }
         return false;
     }
 
     async clearStreams() {
         this.multicastList = [];
-        await this.save();
+        persistence.clearStreams();
+        await persistence.writeJson('settings', this.settings);
     }
 
     getStats() {
@@ -127,22 +139,14 @@ class StreamService {
         this.multicastList.forEach(s => {
             if (s.isAvailable) online++; else offline++;
 
-            // Resolution stats
             const res = s.resolution || 'Unknown';
             resolutions[res] = (resolutions[res] || 0) + 1;
 
-            // Group stats
             const grp = s.groupTitle || 'Default';
             groups[grp] = (groups[grp] || 0) + 1;
         });
 
-        return {
-            total,
-            online,
-            offline,
-            resolutions,
-            groups
-        };
+        return { total, online, offline, resolutions, groups };
     }
 }
 

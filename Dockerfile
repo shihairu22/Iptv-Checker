@@ -6,11 +6,13 @@ WORKDIR /build
 # 设置环境变量
 ENV NODE_ENV=production
 
+# 安装 better-sqlite3 编译所需的原生工具链
+RUN apk add --no-cache python3 make g++
+
 # 复制 package 文件
 COPY package*.json ./
 
-# 安装生产环境依赖
-# 使用 npm ci 确保依赖版本一致性，速度更快
+# 安装生产环境依赖（含 better-sqlite3 native 编译）
 RUN npm ci --omit=dev --no-optional || npm install --omit=dev --no-optional
 
 # 复制源代码
