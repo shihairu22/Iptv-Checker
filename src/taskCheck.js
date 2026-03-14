@@ -209,8 +209,10 @@ class TaskManager extends EventEmitter {
         return new Promise((resolve) => {
             if (!this.meta.running) { resolve(); return; }
             let fullUrl = item.url;
-            if (fullUrl.startsWith('rtp://') && item.udpxyUrl)
-                fullUrl = item.udpxyUrl + '/rtp/' + fullUrl.replace('rtp://', '');
+            // 兼容 rtp://、rtp:/、rtp/ 等多种格式
+            const rtpMatch = fullUrl.match(/^rtp:?\/+@?(.+)/i);
+            if (rtpMatch && item.udpxyUrl)
+                fullUrl = item.udpxyUrl + '/rtp/' + rtpMatch[1];
 
             const maxAttempts = 1 + (parseInt(this.meta.params.retry) || 0);
             let attempts = 0;
