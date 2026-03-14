@@ -263,7 +263,7 @@ class TaskManager extends EventEmitter {
         }
 
         this.task.total = this.task.items.length;
-        const MAX_ITEMS = 10000;
+        const MAX_ITEMS = 500000;
         if (this.task.items.length > MAX_ITEMS) {
             this.task.items = this.task.items.slice(0, MAX_ITEMS);
             this.task.total = MAX_ITEMS;
