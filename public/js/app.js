@@ -1043,8 +1043,19 @@ function bindUIEvents() {
             if (arr.length === 0) return;
             showCenterConfirm(`确定删除选中的 ${arr.length} 个频道吗？`, async function (ok) {
                 if (!ok) return;
-                for (const i of arr) {
-                    try { await fetch(`/api/stream/${i}`, { method: 'DELETE' }); } catch (e) { }
+                try {
+                    const resp = await fetch('/api/streams/batch-delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ indices: arr })
+                    });
+                    const data = await resp.json();
+                    if (!data.success) throw new Error(data.message || '批量删除失败');
+                } catch (e) {
+                    // fallback: sequential delete
+                    for (const i of arr) {
+                        try { await fetch(`/api/stream/${i}`, { method: 'DELETE' }); } catch (_) { }
+                    }
                 }
                 selectedSet = new Set();
                 getStreams();
