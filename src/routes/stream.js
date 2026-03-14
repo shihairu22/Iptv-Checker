@@ -53,12 +53,14 @@ router.post('/check-stream', async (req, res) => {
     multicastUrl = cleanUrl(String(multicastUrl || ''));
     name = cleanText(String(name || ''), 128);
     let fullUrl = multicastUrl;
-    if (fullUrl.startsWith('rtp://') && udpxyUrl) {
-        fullUrl = `${udpxyUrl}/rtp/${fullUrl.replace('rtp://', '')}`;
+    // 兼容 rtp://、rtp://@、rtp/、rtsp:// 等多种格式
+    const rtpMatch = fullUrl.match(/^rtp:?\/+@?(.+)/i);
+    if (rtpMatch && udpxyUrl) {
+        fullUrl = `${udpxyUrl}/rtp/${rtpMatch[1]}`;
     }
 
     // 协议安全校验：仅允许合法的流媒体协议，防止 file:// 等危险协议导致 SSRF
-    const allowedProtocols = ['rtp://', 'udp://', 'http://', 'https://'];
+    const allowedProtocols = ['rtp://', 'udp://', 'http://', 'https://', 'rtsp://', 'rtsps://'];
     if (!allowedProtocols.some(p => fullUrl.toLowerCase().startsWith(p))) {
         return res.status(400).json({ success: false, message: '不支持的流协议' });
     }

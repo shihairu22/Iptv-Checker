@@ -132,7 +132,8 @@ class StreamService {
         // 仅更新 udpxy_url 非空或 multicast_url 以 rtp:// udp:// 开头的行
         const result = persistence.db.prepare(
             `UPDATE streams SET data=json_set(data,'$.httpParam',?)
-             WHERE udpxy_url != '' OR multicast_url LIKE 'rtp://%' OR multicast_url LIKE 'udp://%'`
+             WHERE udpxy_url != '' OR multicast_url LIKE 'rtp://%' OR multicast_url LIKE 'udp://%'
+               OR multicast_url LIKE 'rtsp://%' OR multicast_url LIKE 'rtsps://%'`
         ).run(httpParam);
         return result.changes;
     }

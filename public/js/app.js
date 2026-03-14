@@ -574,7 +574,15 @@ function matchResolutionFilter(resolution, type) {
 function renderStreamsList(arr) {
     const e = typeof escapeHTML === 'function' ? escapeHTML : (s => s);
     const render = arr => arr.map(({ stream, index }) => {
-        const playUrl = `${stream.udpxyUrl || ''}/rtp/${(stream.multicastUrl || '').replace('rtp://', '')}${stream.httpParam ? ('?' + stream.httpParam) : ''}`;
+        // 根据协议决定播放 URL：rtp/udp → 通过 udpxy 转发；rtsp/http 直连
+        let playUrl;
+        const murl = stream.multicastUrl || '';
+        const rtpM = murl.match(/^rtp:?\/+@?(.+)/i);
+        if (rtpM && stream.udpxyUrl) {
+            playUrl = `${stream.udpxyUrl}/rtp/${rtpM[1]}${stream.httpParam ? ('?' + stream.httpParam) : ''}`;
+        } else {
+            playUrl = murl + (stream.httpParam ? ('?' + stream.httpParam) : '');
+        }
         const encodedPlayUrl = encodeURIComponent(playUrl);
         const encodedTitle = encodeURIComponent(stream.name || '');
         return `
