@@ -174,19 +174,8 @@ function getCurrentAppSettingsPayload() {
 async function saveCurrentAppSettings() {
     return await writeJson(CFG_APPSET, getCurrentAppSettingsPayload());
 }
-// 使用 getter 确保始终获取最新的 settings 对象
-// （streamService.init() 会用展开运算符重建 settings 对象，直接引用会失效）
-const settings = new Proxy({}, {
-    get(_, prop) { return streamService.settings[prop]; },
-    set(_, prop, value) { streamService.settings[prop] = value; return true; },
-    has(_, prop) { return prop in streamService.settings; },
-    ownKeys() { return Reflect.ownKeys(streamService.settings); },
-    getOwnPropertyDescriptor(_, prop) {
-        if (prop in streamService.settings) {
-            return { configurable: true, enumerable: true, value: streamService.settings[prop] };
-        }
-    }
-});
+// streamService.init() 现已改用 Object.assign，保持对象引用不变，直接使用即可
+const settings = streamService.settings;
 
 router.get('/api/config/logo-templates', async (req, res) => {
     const defId = 'ltpl-default';
@@ -351,8 +340,14 @@ router.post('/api/settings/rename-group', async (req, res) => {
         const idx = settings.groupTitles.findIndex(g => g === fromName);
         if (idx !== -1) settings.groupTitles[idx] = toName;
     }
-    // 同时也应该保存 group_titles.json
-    await writeJson(CFG_GROUPS, { titles: settings.groupTitles.map(g => ({ name: g, color: '' })) });
+    // 读取现有 group_titles.json，保留颜色等属性，只替换名称
+    const existingGroupsCfg = await readJson(CFG_GROUPS, { titles: [] });
+    const existingTitles = Array.isArray(existingGroupsCfg.titles) ? existingGroupsCfg.titles.map(normalizeGroupTitleForRead) : [];
+    const mergedTitles = settings.groupTitles.map(name => {
+        const existing = existingTitles.find(t => t.name === name);
+        return existing ? existing : { name, color: '' };
+    });
+    await writeJson(CFG_GROUPS, { titles: mergedTitles });
 
     res.json({ success: true, updated, groupTitles: settings.groupTitles });
 });

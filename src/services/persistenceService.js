@@ -51,8 +51,9 @@ class PersistenceService {
                 return false;
             }
         };
-        this.writeLock = this.writeLock.then(_write).catch(() => false);
-        return this.writeLock;
+        const result = this.writeLock.then(_write);
+        this.writeLock = result.catch(() => {});
+        return result;
     }
 
     async saveWithBackup(filename, payload) {
@@ -85,8 +86,9 @@ class PersistenceService {
                 return false;
             }
         };
-        this.writeLock = this.writeLock.then(_write).catch(() => false);
-        return this.writeLock;
+        const result = this.writeLock.then(_write);
+        this.writeLock = result.catch(() => {});
+        return result;
     }
 
     async listBackups(pattern) {

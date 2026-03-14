@@ -57,7 +57,6 @@ router.post('/load-version', async (req, res) => {
 
         const ok = await streamService.loadFromFile(filename);
         if (ok) {
-            await streamService.init(); // 确保加载到内存
             res.json({ success: true, message: '已加载版本：' + filename });
         } else {
             res.status(500).json({ success: false, message: '加载版本失败或版本无效' });

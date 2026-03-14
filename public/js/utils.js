@@ -202,46 +202,111 @@ function ipv4ToInt(ip) {
 }
 
 // 简单的播放列表解析
+
 function parsePlaylistText(text) {
+
     if (!text) return [];
-    const lines = text.split('\n');
+
+    const lines = text.split('
+');
+
     const items = [];
+
     let currentName = '';
 
+    let currentMeta = {};
+
+
+
     for (let line of lines) {
+
         line = line.trim();
+
         if (!line) continue;
 
-        if (line.startsWith('#EXTINF:')) {
-            // #EXTINF:-1,CCTV1
-            const idx = line.lastIndexOf(',');
-            if (idx !== -1) {
-                currentName = line.substring(idx + 1).trim();
-            }
-        } else if (line.startsWith('#')) {
-            // ignore other directives
-            continue;
-        } else if (line.includes(',') && line.includes('://')) {
-            // 简单格式: CCTV1,http://...
-            const parts = line.split(',');
-            if (parts.length >= 2) {
-                const url = parts.pop().trim();
-                const name = parts.join(',').trim();
-                if (url && (url.startsWith('rtp://') || url.startsWith('udp://') || url.startsWith('http'))) {
-                    items.push({ name, url });
-                }
-            }
-        } else {
-            // 纯 URL 行
-            if (line.startsWith('rtp://') || line.startsWith('udp://') || line.startsWith('http')) {
-                items.push({ name: currentName || '未命名频道', url: line });
-                currentName = '';
-            }
-        }
-    }
-    return items;
-}
 
+
+        if (line.startsWith('#EXTINF:')) {
+
+            // 解析扩展属性: tvg-id, tvg-name, tvg-logo, group-title
+
+            // 格式: #EXTINF:-1 tvg-id="..." tvg-name="..." tvg-logo="..." group-title="...",频道名
+
+            currentMeta = {};
+
+            const commaIdx = line.lastIndexOf(',');
+
+            if (commaIdx !== -1) {
+
+                currentName = line.substring(commaIdx + 1).trim();
+
+                const attrPart = line.substring(0, commaIdx);
+
+                const tvgId = attrPart.match(/tvg-id="([^"]*)"/i);
+
+                const tvgName = attrPart.match(/tvg-name="([^"]*)"/i);
+
+                const tvgLogo = attrPart.match(/tvg-logo="([^"]*)"/i);
+
+                const groupTitle = attrPart.match(/group-title="([^"]*)"/i);
+
+                if (tvgId) currentMeta.tvgId = tvgId[1];
+
+                if (tvgName) currentMeta.tvgName = tvgName[1];
+
+                if (tvgLogo) currentMeta.logo = tvgLogo[1];
+
+                if (groupTitle) currentMeta.groupTitle = groupTitle[1];
+
+            }
+
+        } else if (line.startsWith('#')) {
+
+            // ignore other directives
+
+            continue;
+
+        } else if (line.includes(',') && line.includes('://')) {
+
+            // 简单格式: CCTV1,http://...
+
+            const parts = line.split(',');
+
+            if (parts.length >= 2) {
+
+                const url = parts.pop().trim();
+
+                const name = parts.join(',').trim();
+
+                if (url && (url.startsWith('rtp://') || url.startsWith('udp://') || url.startsWith('http'))) {
+
+                    items.push({ name, url });
+
+                }
+
+            }
+
+        } else {
+
+            // 纯 URL 行
+
+            if (line.startsWith('rtp://') || line.startsWith('udp://') || line.startsWith('http')) {
+
+                items.push({ name: currentName || '未命名频道', url: line, ...currentMeta });
+
+                currentName = '';
+
+                currentMeta = {};
+
+            }
+
+        }
+
+    }
+
+    return items;
+
+}
 function unifyChannelNames(items) {
     // 简单的名称清理，实际项目中可能需要更复杂的逻辑
     return items.map(item => {

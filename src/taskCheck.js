@@ -263,6 +263,12 @@ class TaskManager extends EventEmitter {
         }
 
         this.task.total = this.task.items.length;
+        const MAX_ITEMS = 10000;
+        if (this.task.items.length > MAX_ITEMS) {
+            this.task.items = this.task.items.slice(0, MAX_ITEMS);
+            this.task.total = MAX_ITEMS;
+            this.log(`警告：条目数超过上限，已截断至 ${MAX_ITEMS} 条`);
+        }
         if (this.task.total === 0 && (type === 'batch' || type === 'range')) {
             this.log(`警告：解析后扫描条目为 0。请检查输入是否包含有效的 IP 或 URL。参数预览: ${JSON.stringify(params)}`);
             // 如果在运行中发现总数为 0，强制停止

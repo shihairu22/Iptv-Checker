@@ -6,7 +6,7 @@ class StreamService {
         this.settings = {
             globalFcc: '',
             fccServers: [],
-            logoTemplate: 'http://12.12.12.177:9443/lcmyhome/TVlive/raw/branch/main/LOGO/{name}.png',
+            logoTemplate: '',
             groupTitles: ['默认'],
             externalUrl: '',
             internalUrl: '',
@@ -22,7 +22,7 @@ class StreamService {
         const data = await persistence.readJson('streams.json', { streams: [], settings: this.settings });
         this.multicastList = Array.isArray(data.streams) ? data.streams : [];
         if (data.settings) {
-            this.settings = { ...this.settings, ...data.settings };
+            Object.assign(this.settings, data.settings);
         }
     }
 
@@ -42,7 +42,7 @@ class StreamService {
         if (data && data.streams) {
             this.multicastList = Array.isArray(data.streams) ? data.streams : [];
             if (data.settings) {
-                this.settings = { ...this.settings, ...data.settings };
+                Object.assign(this.settings, data.settings);
             }
             await this.save(); // Overwrite the main file
             return true;
@@ -101,7 +101,7 @@ class StreamService {
     }
 
     updateSettings(newSettings) {
-        this.settings = { ...this.settings, ...newSettings };
+        Object.assign(this.settings, newSettings);
     }
 
     async deleteStream(idx) {

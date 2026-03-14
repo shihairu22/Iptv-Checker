@@ -115,10 +115,11 @@ function ffprobeCheck(fullUrl, callback) {
             audioSampleRate: audio_sample_rate,
             raw
         };
-        // 缓存上限清理
+        // 缓存上限清理：按时间戳淘汰最旧的条目
         if (streamCache.size >= MAX_CACHE_SIZE) {
-            const keys = Array.from(streamCache.keys());
-            keys.slice(0, 1000).forEach(k => streamCache.delete(k));
+            const entries = Array.from(streamCache.entries());
+            entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+            entries.slice(0, 1000).forEach(([k]) => streamCache.delete(k));
         }
         streamCache.set(fullUrl, { data: result, timestamp: Date.now() });
         const callbacks = inFlight.get(fullUrl) || [];
