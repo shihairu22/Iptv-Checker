@@ -207,8 +207,7 @@ function parsePlaylistText(text) {
 
     if (!text) return [];
 
-    const lines = text.split('
-');
+    const lines = text.split('\n');
 
     const items = [];
 
