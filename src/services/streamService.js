@@ -42,7 +42,8 @@ class StreamService {
     }
 
     async loadFromFile(filename) {
-        const data = await persistence.readJson(filename, { streams: null, settings: null });
+        // 从 SQLite backups 表读取 payload
+        const data = persistence.getBackupPayload(filename);
         if (data && data.streams) {
             this.multicastList = Array.isArray(data.streams) ? data.streams : [];
             if (data.settings) {
