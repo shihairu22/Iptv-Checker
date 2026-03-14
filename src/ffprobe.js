@@ -96,7 +96,7 @@ function ffprobeCheck(fullUrl, callback) {
                     service_name = json.format.tags.service_name || json.format.tags.title || null;
                 }
             }
-        } catch (e) { }
+        } catch (e) { console.warn('[ffprobe] parse error for', fullUrl, e.message); }
         let speed = null;
         if (bitRate) {
             speed = (bitRate / 8 / 1024).toFixed(2) + ' KB/s';

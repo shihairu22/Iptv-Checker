@@ -255,23 +255,21 @@ class TaskManager extends EventEmitter {
     }
 
     _finalizeItem(queueId) {
-        if (this.meta.paused) return;
         persistence.taskQueueMarkDone([queueId]);
+        if (this.meta.paused) return;
         this.meta.finished++;
         if (this.meta.finished % 100 === 0) this._saveMeta();
     }
 
     _handleResult(item, data) {
         if (this.meta.paused) return;
-        if (data.isAvailable) {
-            this.meta.successCount++;
-            this.resultBuffer.push({
-                ...data,
-                udpxyUrl: item.udpxyUrl || this.meta.params.udpxyUrl,
-                multicastUrl: item.url,
-                name: item.name || data.serviceName || '频道'
-            });
-        }
+        this.meta.successCount++;
+        this.resultBuffer.push({
+            ...data,
+            udpxyUrl: item.udpxyUrl || this.meta.params.udpxyUrl,
+            multicastUrl: item.url,
+            name: item.name || data.serviceName || '频道'
+        });
     }
 
     _clearThrottleTimer() {

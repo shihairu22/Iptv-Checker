@@ -113,7 +113,7 @@ function checkNetwork(urlStr) {
                 });
 
                 const defaultPort = u.protocol === 'https:' ? 443 : (u.protocol === 'rtsp:' || u.protocol === 'rtsps:') ? 554 : 80;
-                socket.connect(u.port || defaultPort, u.hostname);
+                socket.connect(parseInt(u.port) || defaultPort, u.hostname);
 
             } else {
                 // 其他协议直接放行给 ffprobe
