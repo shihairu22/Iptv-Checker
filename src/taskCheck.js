@@ -135,7 +135,7 @@ class TaskManager extends EventEmitter {
         } else if (type === 'range') {
             const { udpxyUrl, startUrl, endUrl, ports: portStr } = params;
             const parseRtp = (url) => {
-                let u = (url || '').trim().replace(/^(rtp|udp):\/\/@?/, '').replace(/^@/, '');
+                let u = (url || '').trim().replace(/^(rtp|udp):?\/+@?/i, '').replace(/^@/, '');
                 const match = u.match(/^([^:]+)(?::(\d+))?$/);
                 if (!match) return null;
                 if (!match[1].match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) return null;
