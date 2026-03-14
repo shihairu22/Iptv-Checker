@@ -148,6 +148,75 @@ router.post('/stream/update', async (req, res) => {
     }
 });
 
+// 批量删除（按索引数组）
+router.post('/streams/batch-delete', async (req, res) => {
+    const { indices } = req.body;
+    if (!Array.isArray(indices) || indices.length === 0) {
+        return res.json({ success: false, message: '缺少 indices 参数' });
+    }
+    // 限制单次批量删除上限，防止超大请求
+    const limited = indices.slice(0, 5000).map(i => parseInt(i, 10)).filter(i => !isNaN(i) && i >= 0);
+    if (limited.length === 0) return res.json({ success: false, message: '无有效索引' });
+    // 按索引从大到小排序，避免删除时偏移
+    limited.sort((a, b) => b - a);
+    let deleted = 0;
+    for (const idx of limited) {
+        const ok = await streamService.deleteStream(idx);
+        if (ok) deleted++;
+    }
+    res.json({ success: true, deleted });
+});
+
+// 导出 M3U
+router.get('/export/m3u', (req, res) => {
+    const { status, resolution } = req.query;
+    let streams = streamService.getAllStreams();
+    if (status && status !== 'all') {
+        const okFilter = status === 'ok';
+        streams = streams.filter(s => (s.status === 'ok') === okFilter);
+    }
+    if (resolution && resolution !== 'all') {
+        streams = streams.filter(s => (s.resolution || '') === resolution);
+    }
+    let content = '#EXTM3U\n';
+    streams.forEach(s => {
+        content += `#EXTINF:-1 tvg-name="${s.name || ''}" tvg-logo="${s.logo || ''}" group-title="${s.groupTitle || '默认'}",${s.name || ''}\n`;
+        content += `${s.multicastUrl || ''}\n`;
+    });
+    const date = new Date().toISOString().replace(/T/, '_').replace(/:/g, '').split('.')[0];
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="streams_${date}.m3u"`);
+    res.send(content);
+});
+
+// 导出 TXT
+router.get('/export/txt', (req, res) => {
+    const { status, resolution } = req.query;
+    let streams = streamService.getAllStreams();
+    if (status && status !== 'all') {
+        const okFilter = status === 'ok';
+        streams = streams.filter(s => (s.status === 'ok') === okFilter);
+    }
+    if (resolution && resolution !== 'all') {
+        streams = streams.filter(s => (s.resolution || '') === resolution);
+    }
+    streams.sort((a, b) => (a.groupTitle || '默认').localeCompare(b.groupTitle || '默认'));
+    let content = '';
+    let currentGroup = '';
+    streams.forEach(s => {
+        const group = s.groupTitle || '默认';
+        if (group !== currentGroup) {
+            content += `${group},#genre#\n`;
+            currentGroup = group;
+        }
+        content += `${s.name || ''},${s.multicastUrl || ''}\n`;
+    });
+    const date = new Date().toISOString().replace(/T/, '_').replace(/:/g, '').split('.')[0];
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="streams_${date}.txt"`);
+    res.send(content);
+});
+
 // 批量设置 FCC 参数
 router.post('/set-fcc', (req, res) => {
     const { fcc } = req.body;

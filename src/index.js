@@ -80,7 +80,7 @@ async function startServer() {
 
         // 3. 业务逻辑鉴权中间件
         // 保护所有页面请求及 API 接口
-        app.use(['/', '/index.html', '/results', '/results.html', '/player.html', '/api/*'], requireAuth);
+        app.use(['/', '/index.html', '/results', '/results.html', '/player.html', '/logs.html', '/api/*'], requireAuth);
 
         // 4. 业务 API 路由
         app.use('/api', streamRouter);
@@ -284,6 +284,7 @@ async function startServer() {
         app.get('/', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
         app.get('/results', (req, res) => res.sendFile(path.join(publicDir, 'results.html')));
         app.get('/player.html', (req, res) => res.sendFile(path.join(publicDir, 'player.html')));
+        app.get('/logs.html', (req, res) => res.sendFile(path.join(publicDir, 'logs.html')));
 
         // 全局错误处理
 
