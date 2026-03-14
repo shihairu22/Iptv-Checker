@@ -95,10 +95,6 @@ router.post('/check-stream', async (req, res) => {
                 name: name || cleanText(String(data.serviceName || ''), 128)
             });
         }
-        const saved = await streamService.save();
-        if (!saved) {
-            return res.status(500).json({ success: false, message: '检测结果保存失败' });
-        }
         res.json({ success: true, ...data });
     } catch (error) {
         console.error(`[Stream Check] Error for ${fullUrl}:`, error.message);
@@ -172,8 +168,8 @@ router.get('/export/m3u', (req, res) => {
     const { status, resolution } = req.query;
     let streams = streamService.getAllStreams();
     if (status && status !== 'all') {
-        const okFilter = status === 'ok';
-        streams = streams.filter(s => (s.status === 'ok') === okFilter);
+        const wantOnline = status === 'ok' || status === 'online';
+        streams = streams.filter(s => !!s.isAvailable === wantOnline);
     }
     if (resolution && resolution !== 'all') {
         streams = streams.filter(s => (s.resolution || '') === resolution);
@@ -194,8 +190,8 @@ router.get('/export/txt', (req, res) => {
     const { status, resolution } = req.query;
     let streams = streamService.getAllStreams();
     if (status && status !== 'all') {
-        const okFilter = status === 'ok';
-        streams = streams.filter(s => (s.status === 'ok') === okFilter);
+        const wantOnline = status === 'ok' || status === 'online';
+        streams = streams.filter(s => !!s.isAvailable === wantOnline);
     }
     if (resolution && resolution !== 'all') {
         streams = streams.filter(s => (s.resolution || '') === resolution);
