@@ -25,9 +25,9 @@ function checkNetwork(urlStr) {
     return new Promise((resolve) => {
         try {
             // 处理 rtp://IP:PORT 或 udp://@IP:PORT 或是纯 IP:PORT
-            if (urlStr.startsWith('rtp://') || urlStr.startsWith('udp://') || !urlStr.includes('://')) {
+            if (/^(rtp|udp):?\/+/i.test(urlStr) || !urlStr.includes('://')) {
                 // 更鲁棒的解析
-                let raw = urlStr.replace(/^(rtp|udp):\/\/@?/, '').replace(/^@/, '');
+                let raw = urlStr.replace(/^(rtp|udp):?\/+@?/i, '').replace(/^@/, '');
                 const [host, portStr] = raw.split(':');
                 const port = parseInt(portStr, 10);
 
