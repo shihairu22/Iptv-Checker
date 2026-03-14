@@ -82,8 +82,8 @@ function checkNetwork(urlStr) {
                     resolve(false);
                 }
 
-            } else if (urlStr.startsWith('http')) {
-                // 对于 HTTP/HTTPS，简单的 Socket 连接检查即可 (检查 TCP 握手)
+            } else if (/^https?:\/\//i.test(urlStr) || /^rtsps?:\/\//i.test(urlStr)) {
+                // 对于 HTTP/HTTPS/RTSP/RTSPS，简单的 Socket 连接检查即可 (检查 TCP 握手)
                 // udpxy 的情况：http://IP:PORT/rtp/...
                 // 我们只检查 IP:PORT 是否可 TCP 建立连接
                 let u;
@@ -112,7 +112,8 @@ function checkNetwork(urlStr) {
                     resolve(false);
                 });
 
-                socket.connect(u.port || (u.protocol === 'https:' ? 443 : 80), u.hostname);
+                const defaultPort = u.protocol === 'https:' ? 443 : (u.protocol === 'rtsp:' || u.protocol === 'rtsps:') ? 554 : 80;
+                socket.connect(u.port || defaultPort, u.hostname);
 
             } else {
                 // 其他协议直接放行给 ffprobe
