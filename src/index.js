@@ -225,6 +225,58 @@ async function startServer() {
         app.post('/api/task/stop', (req, res) => { taskManager.stop(); res.json({ success: true }); });
         app.post('/api/task/resume', (req, res) => res.json({ success: taskManager.resume() }));
 
+        // 6b. 播放器相关接口
+        app.post('/api/player/log', (req, res) => {
+            try {
+                const b = req.body || {};
+                const name = String(b.name || b.tvgName || '').trim();
+                const mode = String(b.mode || '').trim();
+                const cast = String(b.cast || '').trim();
+                const programTitle = String(b.programTitle || '').trim();
+                const url = String(b.url || '').trim();
+                const info = [name ? `频道: ${name}` : '', mode ? `类型: ${mode}` : '', cast ? `/${cast}` : '', programTitle ? `节目: ${programTitle}` : '', url ? `地址: ${url}` : ''].filter(Boolean).join(' | ');
+                if (info) logger.info(`播放日志 -> ${info}`);
+                res.json({ success: true });
+            } catch (e) { res.json({ success: false }); }
+        });
+
+        // EPG节目表（桩接口，暂不实现EPG解析）
+        app.get('/api/epg/programs', (req, res) => {
+            res.json({ success: true, programs: [] });
+        });
+
+        // 时移回看（桩接口）
+        app.post('/api/catchup/play', (req, res) => {
+            res.json({ success: false, message: '时移功能暂未实现' });
+        });
+
+        // 导出 JSON（供播放器加载频道列表）
+        app.get('/api/export/json', (req, res) => {
+            const streams = streamService.getAllStreams();
+            res.json({ success: true, streams });
+        });
+
+        // 台标代理（简单透传，不做图像处理）
+        app.get('/api/logo', async (req, res) => {
+            try {
+                const { URL: NURL } = require('url');
+                const nm = String(req.query.name || '').trim();
+                if (!nm) return res.status(400).send('missing name');
+                const persistence = require('./services/persistenceService');
+                const cfg = await persistence.readJson('logo_templates.json', { templates: [] });
+                const listRaw = Array.isArray(cfg.templates) ? cfg.templates : [];
+                const tpl = (listRaw[0] && (listRaw[0].url || listRaw[0])) || '';
+                if (!tpl) return res.status(404).send('no template');
+                const target = String(tpl).replace('{name}', encodeURIComponent(nm));
+                const resp = await axios.get(target, { responseType: 'arraybuffer', validateStatus: () => true, headers: { 'User-Agent': 'IPTV-Checker/1.0' } });
+                if (resp.status < 200 || resp.status >= 300) return res.status(404).send('not found');
+                const ct = resp.headers['content-type'] || 'image/png';
+                res.set('Cache-Control', 'public, max-age=604800');
+                res.type(ct);
+                res.send(Buffer.from(resp.data));
+            } catch (e) { res.status(404).send('not found'); }
+        });
+
         // 7. 配置相关路由
         app.use('/', configRouter);
 

@@ -1,80 +1,2336 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IPTV 播放器</title>
-    <style>
-        body,html{margin:0;padding:0;width:100%;height:100%;background-color:#000;overflow:hidden}
-        #playerWrap{width:100%;height:100%;position:relative;background:#000}
-        #video{width:100%;height:100%;background:#000}
-        #msg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#fff;font-size:20px;display:none;text-align:center;padding:12px 16px;background:rgba(0,0,0,.45);border-radius:8px}
-    </style>
-    <script src="/vendor/hls.js/hls.min.js"></script>
-    <script src="/vendor/mpegts.js/mpegts.min.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title> 播放器 - IPTV Checker</title>
+  <link rel="icon" type="image/png" href="/iptv.png">
+  <link rel="preload" href="/vendor/bootstrap-icons/1.11.3/font/fonts/bootstrap-icons.woff2?dd67030699838ea613ee6dbda90effa6" as="font" type="font/woff2" crossorigin>
+  <link href="/vendor/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <script>
+    (async function(){
+      try{
+        const r=await fetch('/api/auth/check');
+        const j=await r.json();
+        if(!j.success){
+          var back=location.pathname+location.search+location.hash;
+          location.href='/login.html?redirect='+encodeURIComponent(back);
+        }
+      }catch(e){
+        var back=location.pathname+location.search+location.hash;
+        location.href='/login.html?redirect='+encodeURIComponent(back);
+      }
+    })();
+  </script>
+  <style>
+    html,body{
+      margin:0;
+      padding:0;
+      width:100%;
+      height:100%;
+      background:#000;
+      color:#fff;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
+    }
+    :root{--bg:#0b0d12;--card:#141922;--muted:#8a93a5}
+    body{
+      margin:0;
+      padding:0;
+      overflow:hidden;
+      background:#000;
+      color:#fff;
+      display:flex;
+      height:100vh;
+    }
+    .muted{color:var(--muted)}
+    #playerLayer{
+      position:relative;
+      flex:1;
+      min-width:0;
+      height:100vh;
+      z-index:0;
+      background:#000;
+    }
+    #app{width:100%;height:100%}
+    #channelLayer{
+      position:relative;
+      width:380px;
+      max-width:420px;
+      height:100vh;
+      z-index:5;
+      background:#f9fafb;
+      display:flex;
+      flex-direction:column;
+      border-left:1px solid #e5e7eb;
+      content-visibility:auto;
+    }
+    #channelLayer.collapsed{
+      width:0;
+      opacity:0;
+      pointer-events:none;
+    }
+    .channel-header{
+      padding:12px 16px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      border-bottom:1px solid #e5e7eb;
+      background:#ffffff;
+      gap:8px;
+      position:relative;
+    }
+    .channel-header-title{
+      font-weight:600;
+      font-size:15px;
+      color:#111827;
+      position:absolute;
+      left:50%;
+      transform:translateX(-50%);
+      text-align:center;
+    }
+    .channel-actions{
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .channel-theme-btn{
+      border:none;
+      background:#e5e7eb;
+      color:#111827;
+      border-radius:999px;
+      font-size:12px;
+      padding:4px 10px;
+      cursor:pointer;
+    }
+    .channel-theme-btn:active{
+      transform:scale(0.96);
+    }
+    .channel-close-btn{
+      border:none;
+      background:transparent;
+      color:#6b7280;
+      font-size:18px;
+      cursor:pointer;
+      padding:0 4px;
+    }
+    .channel-close-btn:hover{
+      color:#111827;
+    }
+    .channel-search-wrap{
+      padding:8px 16px 4px;
+      background:#ffffff;
+      border-bottom:1px solid #e5e7eb;
+    }
+    .channel-search-input{
+      width:100%;
+      border-radius:999px;
+      border:1px solid #e5e7eb;
+      padding:6px 12px;
+      font-size:14px;
+      outline:none;
+      background:#f3f4f6;
+      color:#111827;
+    }
+    .channel-search-input::placeholder{
+      color:#9ca3af;
+    }
+    .channel-tabs-wrap{
+      padding:4px 12px 8px;
+      background:#ffffff;
+      border-bottom:1px solid #e5e7eb;
+    }
+    #catTabs{
+      gap:6px;
+    }
+    #catTabs .nav-link{
+      border-radius:999px;
+      padding:4px 10px;
+      font-size:13px;
+      color:#4b5563;
+      background:transparent;
+    }
+    #catTabs .nav-link.active{
+      background:#2563eb;
+      color:#ffffff;
+    }
+    .channel-list-scroll{
+      flex:1;
+      overflow-y:auto;
+      padding:8px 10px 12px;
+    }
+    .channel-item{
+      margin:4px 4px;
+      border-radius:14px;
+      background:#ffffff;
+      box-shadow:0 1px 3px rgba(15,23,42,0.08);
+      padding:8px 10px;
+      color:#111827;
+      cursor:pointer;
+      transition:background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+    }
+    .channel-item.active{
+      background:#eef2ff;
+      border-left:0;
+      box-shadow:0 0 0 1px rgba(37,99,235,0.25);
+      transform:translateY(-1px);
+    }
+    .channel-item:hover{
+      background:#f3f4ff;
+      box-shadow:0 4px 10px rgba(15,23,42,0.12);
+      transform:translateY(-2px);
+    }
+    .channel-title{
+      font-size:14px;
+      font-weight:600;
+      color:#111827;
+    }
+    .channel-title-text{
+      flex:1;
+      min-width:0;
+    }
+    .channel-replay-icon{
+      font-size:14px;
+      color:#f97316;
+    }
+    .channel-sub{
+      color:#6b7280;
+    }
+    .channel-count-badge{
+      border-radius:999px;
+      background:#e5edff;
+      color:#1d4ed8;
+      font-size:12px;
+    }
+    .channel-index-badge{
+      width:26px;
+      height:26px;
+      border-radius:999px;
+      background:#eef2ff;
+      color:#2563eb;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:13px;
+      font-weight:600;
+      flex-shrink:0;
+    }
+    .channel-logo-right{
+      width:72px;
+      height:40px;
+      flex-shrink:0;
+      background:#ffffff;
+      border-radius:8px;
+      box-shadow:0 2px 6px rgba(15,23,42,0.28);
+      padding:3px 6px;
+    }
+    :root{--epg-gap:112px}
+    @media (max-height:800px){:root{--epg-gap:96px}}
+    @media (max-height:680px){:root{--epg-gap:80px}}
+    #epgLayer{
+      position:fixed; top:var(--epg-gap); left:20px; width:300px; bottom:var(--epg-gap); z-index:4;
+      background:rgba(10,12,24,0.32); backdrop-filter:blur(10px);
+      border-radius:12px; border:1px solid rgba(255,255,255,.08);
+      display:flex; flex-direction:column; transition:opacity 0.3s ease, transform 0.3s ease;
+    }
+    #channelLayer.dark{
+      background:#020617;
+      border-left:1px solid #111827;
+    }
+    #channelLayer.dark .channel-header{
+      background:#020617;
+      border-bottom:1px solid #1f2937;
+    }
+    #channelLayer.dark .channel-header-title{
+      color:#f9fafb;
+    }
+    #channelLayer.dark .channel-theme-btn{
+      background:#1f2937;
+      color:#e5e7eb;
+    }
+    #channelLayer.dark .channel-close-btn{
+      color:#9ca3af;
+    }
+    #channelLayer.dark .channel-search-wrap{
+      background:#020617;
+      border-bottom:1px solid #1f2937;
+    }
+    #channelLayer.dark .channel-search-input{
+      background:#020617;
+      border-color:#1f2937;
+      color:#e5e7eb;
+    }
+    #channelLayer.dark .channel-search-input::placeholder{
+      color:#6b7280;
+    }
+    #channelLayer.dark .channel-tabs-wrap{
+      background:#020617;
+      border-bottom:1px solid #1f2937;
+    }
+    #channelLayer.dark .channel-item{
+      background:#020617;
+      color:#f9fafb;
+      box-shadow:0 1px 3px rgba(15,23,42,0.7);
+    }
+    #channelLayer.dark .channel-item.active{
+      background:#111827;
+      box-shadow:0 0 0 1px rgba(59,130,246,0.9);
+    }
+    #channelLayer.dark .channel-title{
+      color:#f9fafb;
+    }
+    #channelLayer.dark .channel-sub{
+      color:#f9fafb;
+    }
+    #channelLayer.dark .channel-count-badge{
+      background:#1e293b;
+      color:#93c5fd;
+    }
+    #channelLayer.dark .channel-index-badge{
+      background:#111827;
+      color:#bfdbfe;
+    }
+    #channelLayer.dark .channel-logo-right{
+      background:#020617;
+      box-shadow:0 2px 8px rgba(15,23,42,0.9);
+    }
+    #channelLayer.dark #catTabs .nav-link{
+      color:#e5e7eb;
+    }
+    #epgLayer.hidden{opacity:0; pointer-events:none; transform:translateX(-20px)}
+    .player-overlay-top{position:absolute;top:0;left:0;width:100%;z-index:5;pointer-events:none}
+    .player-info-overlay{
+      position:absolute; top:20px; right:30px; z-index:10;
+      background:rgba(255,255,255,0.15); backdrop-filter:blur(10px);
+      border-radius:12px; border:1px solid rgba(255,255,255,0.2);
+      padding:15px 25px; box-shadow:0 8px 24px rgba(0,0,0,0.2);
+      display:flex; flex-direction:column; align-items:center;
+      pointer-events:none; transition:opacity 0.3s;
+    }
+    .player-info-overlay.is-hidden{opacity:0}
+    .info-logo{height:48px; width:auto; object-fit:contain; filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3))}
+    .info-title{font-size:18px; text-shadow:0 2px 4px rgba(0,0,0,0.5)}
+    .info-sub{font-size:13px; text-shadow:0 1px 2px rgba(0,0,0,0.5)}
+    .badge-live{background:linear-gradient(135deg,#ff3b3b,#ff6a00)}
+    .badge-replay{background:linear-gradient(135deg,#1cc36b,#0e9f55)}
+    .logo-img{height:26px; width:46px; object-fit:contain}
+    .program-progress-label{
+      position:absolute;
+      left:0;
+      right:0;
+      bottom:100%;
+      margin-bottom:2px;
+      pointer-events:none;
+      font-size:12px;
+      color:rgba(255,255,255,0.8);
+      text-shadow:0 1px 3px rgba(0,0,0,0.9);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:0 4px;
+    }
+    .program-progress-mode{
+      flex:0 0 auto;
+      margin-right:8px;
+      padding:0 6px;
+      border-radius:999px;
+      font-size:11px;
+      line-height:16px;
+      white-space:nowrap;
+    }
+    .program-progress-mode-live{
+      background:linear-gradient(135deg,#ff3b3b,#ff6a00);
+    }
+    .program-progress-mode-replay{
+      background:linear-gradient(135deg,#1cc36b,#0e9f55);
+    }
+    .program-progress-start,
+    .program-progress-end{
+      flex:0 0 auto;
+      white-space:nowrap;
+    }
+    .program-progress-title{
+      flex:1 1 auto;
+      margin:0 8px;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .program-progress-meta{
+      display:flex;
+      align-items:center;
+      gap:6px;
+      margin-left:8px;
+    }
+    .program-progress-end{
+      margin-left:6px;
+    }
+    ::-webkit-scrollbar{width:6px;height:6px}
+    ::-webkit-scrollbar-track{background:rgba(255,255,255,.05)}
+    ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.2);border-radius:3px}
+    ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.3)}
+    #epgList{
+      padding:4px 6px 6px;
+    }
+    .epg-item{
+      font-size:14px;
+      padding:6px 10px;
+      margin:2px 0;
+      border-radius:14px;
+      border:0;
+      background:transparent;
+      cursor:pointer;
+      color:#e5e7eb;
+      text-align:left;
+      transition:background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+    }
+    .epg-item .small{
+      font-size:12px;
+      color:var(--muted);
+    }
+    .epg-item:hover{
+      background:rgba(255,255,255,0.06);
+      box-shadow:0 3px 8px rgba(15,23,42,0.5);
+      transform:translateY(-1px);
+    }
+    .epg-item.active-epg{
+      background:rgba(37,99,235,0.26);
+      box-shadow:0 0 0 1px rgba(129,140,248,0.85),0 6px 14px rgba(15,23,42,0.7);
+      transform:translateY(-1px);
+    }
+    #liveBtn{
+      position:relative;
+      width:36px;
+      height:100%;
+      padding:6px;
+      border:none;
+      background:transparent;
+      color:rgba(255,255,255,0.8);
+      font-size:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      opacity:.9;
+      margin-right:8px;
+    }
+    #liveBtn span{
+      font-size:12px;
+      white-space:nowrap;
+    }
+    #liveBtn_dot{
+      width:8px;
+      height:8px;
+      border-radius:50%;
+      margin-right:4px;
+      background:#ef4444;
+    }
+    .live-dot-blink{
+      animation:live-dot-blink 1s infinite;
+    }
+    @keyframes live-dot-blink{
+      0%,50%{opacity:1}
+      75%{opacity:0.2}
+      100%{opacity:1}
+    }
+    #sourceBtn{
+      position:relative;
+      width:36px;
+      height:100%;
+      padding:6px;
+      border:none;
+      background:transparent;
+      color:rgba(255,255,255,0.8);
+      font-size:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      cursor:pointer;
+      pointer-events:auto;
+      opacity:.9;
+      margin-right:8px;
+    }
+    #sourceBtn:hover{
+      color:#fff;
+    }
+    #sourceBtn i{ font-size:18px; line-height:1; }
+    #sourcePanel{
+      position:absolute;
+      bottom:100%;
+      left:50%;
+      transform:translateX(-50%);
+      margin-bottom:20px;
+      max-height:50vh;
+      overflow:auto;
+      opacity:1;
+      display:none;
+      width:max-content;
+      min-width:0;
+      z-index:50;
+      pointer-events:auto;
+    }
+    .source-row{
+      padding:6px 10px;
+      display:flex;
+      align-items:center;
+      gap:6px;
+      font-size:12px;
+      color:#fff;
+      cursor:pointer;
+    }
+    .source-row:hover{
+      background:rgba(255,255,255,0.08);
+    }
+    .source-row.active{
+      background:rgba(37,99,235,0.28);
+      color:#dbeafe;
+    }
+    .source-tag{
+      width:6px;
+      height:6px;
+      border-radius:50%;
+      background:#22c55e;
+    }
+  </style>
 </head>
 <body>
-    <div id="playerWrap">
-        <video id="video" controls autoplay playsinline></video>
-        <div id="msg"></div>
+  <div id="playerLayer">
+    <div id="app"></div>
+    <div class="player-info-overlay">
+       <div class="info-content text-center">
+         <img id="logoImg" class="info-logo mb-2 d-none" alt="logo" decoding="async" fetchpriority="high" height="48">
+         <div id="titleEl" class="info-title fw-bold text-white mb-1">IPTV 播放</div>
+         <div class="d-flex align-items-center justify-content-center gap-2">
+            <span id="channelNumBadge" class="badge bg-light text-dark bg-opacity-75 rounded-1 px-1 py-0 small d-none"></span>
+            <div id="subEl" class="info-sub small text-white-50"></div>
+         </div>
+       </div>
     </div>
-    <script>
-        (function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const rawUrl = urlParams.get('url');
-            const title = urlParams.get('title') || 'IPTV 直播';
-            const video = document.getElementById('video');
-            const msg = document.getElementById('msg');
+    <div class="player-overlay-top d-flex justify-content-between align-items-start p-3">
+      <div class="d-flex align-items-center gap-2">
+        <span id="replayBadge" class="badge badge-replay rounded-pill px-3 py-2 d-none"><i class="bi bi-play-circle me-1"></i>正在回放</span>
+        <span id="liveBadge" class="badge badge-live rounded-pill px-3 py-2 d-none"><i class="bi bi-broadcast me-1"></i>LIVE</span>
+      </div>
+    </div>
+  </div>
+  <div id="channelLayer">
+    <div class="channel-header">
+      <div class="channel-header-title">频道</div>
+      <div class="channel-actions">
+        <button id="themeToggleBtn" class="channel-theme-btn">浅色</button>
+        <button id="closeSidebarBtn" class="channel-close-btn">×</button>
+      </div>
+    </div>
+    <div class="channel-search-wrap">
+      <input id="searchInput" class="channel-search-input" placeholder="搜索频道…">
+    </div>
+    <div class="channel-tabs-wrap">
+      <ul id="catTabs" class="nav nav-pills small mb-0 flex-wrap"></ul>
+    </div>
+    <div id="channelScroll" class="channel-list-scroll">
+      <div id="channelList" class="list-group list-group-flush"></div>
+    </div>
+  </div>
+  <div id="epgLayer">
+    <div class="p-3 border-bottom border-secondary d-flex align-items-center justify-content-between">
+      <span class="fw-semibold">节目单</span>
+      <div class="d-flex gap-1">
+        <select id="epgSourceSel" class="form-select form-select-sm bg-dark text-white border-secondary py-0" style="width:auto;height:24px;font-size:12px"></select>
+        <button id="epgRefreshBtn" class="btn btn-sm btn-link text-white p-0">↻</button>
+      </div>
+    </div>
+    <div class="p-2 border-bottom border-secondary bg-black bg-opacity-25">
+      <ul id="epgDateTabs" class="nav nav-pills gap-1 flex-nowrap" style="overflow-x:auto;padding-bottom:4px"></ul>
+    </div>
+    <div class="flex-grow-1" style="overflow-y:auto;">
+      <div class="list-group list-group-flush" id="epgList"></div>
+      <div id="epgHint" class="p-3 small text-white-50 text-center"></div>
+    </div>
+  </div>
+  <script src="/vendor/qier-player/index.min.js"></script>
+  <script>
+    function qs(k){return new URLSearchParams(location.search).get(k)||''}
+    var rawUrl=qs('url');
+    var qierPlayer=null;
+    var v=null;
+    var hevcHlsSwitchOnce=false;
+    var currentPlayer=null;
+    var _reco={n:0,t:null,stall:null};
+    var sources=[];
+    var currentSourceIndex=-1;
+    var liveBtn=null;
+    var liveLabelEl=null;
+    var liveDot=null;
+    var isLive=true;
+    var isPlaying=false;
+    var title=qs('title')||'IPTV 播放';
+    var logo=qs('logo');
+    var tvgId=qs('tvgId');
+    var tvgName=qs('tvgName')||title;
+    var liveFlag=(qs('live')==='1'||qs('live')==='true');
+    var epgId=qs('epgId')||'';
+    var uiCompact=(qs('ui')==='mini'||qs('sidebar')==='0'||qs('hideUi')==='1');
+    if(liveFlag===false){
+      isLive=false;
+    }
+    var sourceBtn=null;
+    var sourceLabelEl=null;
+    var sourcePanel=null;
+    var titleEl=document.getElementById('titleEl');
+    var subEl=document.getElementById('subEl');
+    var logoImg=document.getElementById('logoImg');
+    var liveBadge=document.getElementById('liveBadge');
+    var replayBadge=document.getElementById('replayBadge');
+    var channelLayer=document.getElementById('channelLayer');
+    var epgLayer=document.getElementById('epgLayer');
+    var closeBtn=document.getElementById('closeSidebarBtn');
+    var infoOverlay=document.querySelector('.player-info-overlay');
+    var uiTimer=null;
+    var isHoveringUi=false;
+    var UI_HIDE_MS=3000;
+    var lastHideTs=0;
+    var infoTimer=null;
+    var INFO_HIDE_MS=10000;
+    var epgHint=document.getElementById('epgHint');
+    var epgList=document.getElementById('epgList');
+    var epgSel=document.getElementById('epgSourceSel');
+    var epgRefresh=document.getElementById('epgRefreshBtn');
+    var epgDateTabs=document.getElementById('epgDateTabs');
+    var epgSources=[];
+    var settingsCache=null;
+    var externalLogoTpl='';
+    var selectedDate=new Date();
 
-            function showMsg(text) {
-                msg.textContent = text;
-                msg.style.display = 'block';
-            }
+    var catTabs=document.getElementById('catTabs');
+    var searchInput=document.getElementById('searchInput');
+    var channelList=document.getElementById('channelList');
+    var selectedCat='all';
+    var streams=[];
+    var current=null;
+    var currentReplayProgram=null;
+    var currentLiveProgram=null;
+    var currentLiveTitle='';
+    var channelNowTitleByKey={};
+    var themeToggleBtn=document.getElementById('themeToggleBtn');
+    var isChannelDark=false;
+    var progressInfoWrap=null;
+    var progressInfoMode=null;
+    var progressInfoStart=null;
+    var progressInfoTitle=null;
+    var progressInfoEnd=null;
+    var progressInfoMeta=null;
 
-            if (!rawUrl) { showMsg('无效的播放地址'); return; }
-            if (!rawUrl.startsWith('/api/proxy/')) { showMsg('仅支持代理播放'); return; }
-            document.title = title;
-            const isHls = rawUrl.includes('.m3u8') || rawUrl.includes('/hls');
-            let hlsPlayer = null;
-            let mpegtsPlayer = null;
+    if(titleEl) titleEl.textContent=title;
+    if(subEl) subEl.textContent=tvgName||'';
+    function logoUrlForSized(name,opts){
+      var u=logoUrlFor(name);
+      if(!u) return u;
+      var arr=[];
+      if(opts&&opts.w) arr.push('w='+encodeURIComponent(opts.w));
+      if(opts&&opts.h) arr.push('h='+encodeURIComponent(opts.h));
+      if(opts&&opts.fit) arr.push('fit='+encodeURIComponent(opts.fit));
+      if(opts&&opts.fmt) arr.push('fmt='+encodeURIComponent(opts.fmt));
+      if(arr.length===0) return u;
+      return u+(u.indexOf('?')===-1?'?':'&')+arr.join('&');
+    }
+    (function initLogoOnLoad(){
+      var useExternal=false;
+      try{ useExternal=(localStorage.getItem('useExternal')==='true'); }catch(e){ useExternal=false; }
+      var externalHost=isExternalHost();
+      if((useExternal||externalHost) && logoImg){
+        var nm=tvgName||title||'';
+        var src=logoUrlForSized(nm,{h:48,fit:'contain',fmt:'webp'});
+        logoImg.onerror=function(){ this.onerror=null; this.src='/iptv.png'; this.classList.remove('d-none'); };
+        logoImg.src = src || '/iptv.png';
+        logoImg.classList.remove('d-none');
+      }else if(logo && logoImg){
+        logoImg.onerror=function(){ this.onerror=null; this.src='/iptv.png'; this.classList.remove('d-none'); };
+        logoImg.src=logo || '/iptv.png'; 
+        logoImg.classList.remove('d-none');
+      }
+    })();
+    if(liveFlag && liveBadge) liveBadge.classList.remove('d-none');
+    if(uiCompact){
+      if(channelLayer) channelLayer.classList.add('collapsed');
+      if(epgLayer) epgLayer.style.display='none';
+      if(closeBtn) closeBtn.classList.add('d-none');
+      if(themeToggleBtn) themeToggleBtn.classList.add('d-none');
+    }
+    applyChannelTheme();
 
-            if (isHls) {
-                if (window.Hls && Hls.isSupported()) {
-                    hlsPlayer = new Hls();
-                    hlsPlayer.loadSource(rawUrl);
-                    hlsPlayer.attachMedia(video);
-                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                    video.src = rawUrl;
-                } else {
-                    showMsg('当前浏览器不支持 HLS 播放');
-                    return;
-                }
-            } else {
-                if (window.mpegts && mpegts.getFeatureList().mseLivePlayback) {
-                    mpegtsPlayer = mpegts.createPlayer({
-                        type: 'mpegts',
-                        isLive: true,
-                        url: rawUrl,
-                        enableStashBuffer: false,
-                        liveBufferLatencyChasing: true
-                    });
-                    mpegtsPlayer.attachMediaElement(video);
-                    mpegtsPlayer.load();
-                } else {
-                    video.src = rawUrl;
-                }
-            }
+    function logStatus(msg){
+      console.log('[test-player]',msg);
+    }
 
-            video.play().catch(() => {});
-            video.addEventListener('error', function () {
-                showMsg('播放失败，请检查代理地址或流状态');
+    function applyChannelTheme(){
+      if(!channelLayer) return;
+      if(isChannelDark){
+        channelLayer.classList.add('dark');
+        if(themeToggleBtn) themeToggleBtn.textContent='深色';
+      }else{
+        channelLayer.classList.remove('dark');
+        if(themeToggleBtn) themeToggleBtn.textContent='浅色';
+      }
+    }
+    if(themeToggleBtn){
+      themeToggleBtn.onclick=function(){
+        isChannelDark=!isChannelDark;
+        applyChannelTheme();
+      };
+    }
+
+    if(channelLayer){
+      channelLayer.addEventListener('mouseenter',function(){
+        isHoveringUi=true;
+        if(uiTimer) clearTimeout(uiTimer);
+      });
+      channelLayer.addEventListener('mouseleave',function(){
+        isHoveringUi=false;
+        resetUiTimer();
+      });
+    }
+    if(epgLayer){
+      epgLayer.addEventListener('mouseenter',function(){
+        isHoveringUi=true;
+        if(uiTimer) clearTimeout(uiTimer);
+      });
+      epgLayer.addEventListener('mouseleave',function(){
+        isHoveringUi=false;
+        resetUiTimer();
+      });
+    }
+
+    function updateLiveDotBlink(){
+      if(!liveDot) return;
+      if(isPlaying){
+        liveDot.classList.add('live-dot-blink');
+      }else{
+        liveDot.classList.remove('live-dot-blink');
+      }
+    }
+
+    function updateLiveBadge(){
+      if(!liveBtn || !liveDot) return;
+      if(isLive){
+        liveDot.style.background='#ef4444';
+      }else{
+        liveDot.style.background='#22c55e';
+      }
+      updateLiveDotBlink();
+      if(liveLabelEl) liveLabelEl.textContent='';
+    }
+
+    var __libLoaders={};
+    function loadScriptOnce(url){
+      if(__libLoaders[url]) return __libLoaders[url];
+      __libLoaders[url]=new Promise(function(resolve,reject){
+        try{
+          var s=document.createElement('script');
+          s.src=url;
+          s.async=true;
+          s.onload=function(){resolve(true)};
+          s.onerror=function(){reject(new Error('load fail: '+url))};
+          document.head.appendChild(s);
+        }catch(e){reject(e)}
+      });
+      return __libLoaders[url];
+    }
+    var __loadingHls=false, __loadingMpegts=false;
+    function ensureHls(){
+      if(window.Hls) return Promise.resolve(true);
+      if(__loadingHls) return (__libLoaders['/vendor/hls.js/hls.min.js']||Promise.resolve(true));
+      __loadingHls=true;
+      return loadScriptOnce('/vendor/hls.js/hls.min.js').catch(function(){});
+    }
+    function ensureMpegts(){
+      if(window.mpegts) return Promise.resolve(true);
+      if(__loadingMpegts) return (__libLoaders['/vendor/mpegts.js/mpegts.js']||Promise.resolve(true));
+      __loadingMpegts=true;
+      return loadScriptOnce('/vendor/mpegts.js/mpegts.js').catch(function(){});
+    }
+
+    function ensureProgressProgramUi(){
+      if(progressInfoWrap && progressInfoTitle) return;
+      var root=qierPlayer&&qierPlayer.el;
+      if(!root) return;
+      var prog=root.querySelector('.qier-player_progress');
+      if(!prog) return;
+      if(getComputedStyle(prog).position==='static'){
+        prog.style.position='relative';
+      }
+      var wrap=document.createElement('div');
+      wrap.className='program-progress-label d-none';
+      var modeSpan=document.createElement('span');
+      var startSpan=document.createElement('span');
+      var titleSpan=document.createElement('span');
+      var endSpan=document.createElement('span');
+      var metaWrap=document.createElement('div');
+      modeSpan.className='program-progress-mode';
+      startSpan.className='program-progress-start';
+      titleSpan.className='program-progress-title';
+      endSpan.className='program-progress-end';
+      metaWrap.className='program-progress-meta d-flex align-items-center gap-1';
+      wrap.appendChild(modeSpan);
+      wrap.appendChild(startSpan);
+      wrap.appendChild(titleSpan);
+      wrap.appendChild(metaWrap);
+      wrap.appendChild(endSpan);
+      prog.appendChild(wrap);
+      progressInfoWrap=wrap;
+      progressInfoMode=modeSpan;
+      progressInfoStart=startSpan;
+      progressInfoTitle=titleSpan;
+      progressInfoEnd=endSpan;
+      progressInfoMeta=metaWrap;
+      updateProgramProgressLabel();
+    }
+
+    function formatHm(ms){
+      if(typeof ms!=='number') return '';
+      var d=new Date(ms);
+      var h=String(d.getHours()).padStart(2,'0');
+      var m=String(d.getMinutes()).padStart(2,'0');
+      return h+':'+m;
+    }
+
+    function updateProgramProgressLabel(){
+      if(!progressInfoWrap || !progressInfoTitle || !progressInfoStart || !progressInfoEnd || !progressInfoMode) return;
+      var prog=null;
+      var mode='';
+      if(currentReplayProgram){
+        prog=currentReplayProgram;
+        mode='replay';
+      }else if(currentLiveProgram){
+        prog=currentLiveProgram;
+        mode='live';
+      }
+      if(!prog){
+        progressInfoWrap.classList.add('d-none');
+        progressInfoStart.textContent='';
+        progressInfoTitle.textContent='';
+        progressInfoEnd.textContent='';
+        progressInfoMode.textContent='';
+        progressInfoMode.classList.remove('program-progress-mode-live','program-progress-mode-replay');
+        if(progressInfoMeta) progressInfoMeta.innerHTML='';
+        return;
+      }
+      var startStr=formatHm(prog.startMs);
+      var endStr=formatHm(prog.endMs);
+      var title=prog.title||'';
+      progressInfoStart.textContent=startStr;
+      progressInfoTitle.textContent=title||'';
+      progressInfoEnd.textContent=endStr;
+      if(mode==='live'){
+        progressInfoMode.textContent='直播';
+        progressInfoMode.classList.add('program-progress-mode-live');
+        progressInfoMode.classList.remove('program-progress-mode-replay');
+      }else if(mode==='replay'){
+        progressInfoMode.textContent='回放';
+        progressInfoMode.classList.add('program-progress-mode-replay');
+        progressInfoMode.classList.remove('program-progress-mode-live');
+      }else{
+        progressInfoMode.textContent='';
+        progressInfoMode.classList.remove('program-progress-mode-live','program-progress-mode-replay');
+      }
+      if(progressInfoMeta){
+        var castLbl='';
+        var qualityLbl='';
+        var fpsLbl='';
+        var audioLbl=''; // 后端暂未提供声道信息，保留为空
+        var codecLbl='';
+        if(current){
+          if(mode==='replay'){
+            castLbl='单播';
+          }else{
+            castLbl=isMulticastStream(current)?'组播':'单播';
+          }
+          qualityLbl=resTag(current.resolution||'')||'';
+          fpsLbl=current.frameRate?formatFps(current.frameRate):'';
+          codecLbl=formatCodec(current.codec||'');
+        }
+        var badgeCls = mode==='live' ? 'badge-live' : (mode==='replay' ? 'badge-replay' : 'bg-secondary');
+        var parts=[];
+        if(castLbl) parts.push('<span class="badge '+badgeCls+' rounded-pill px-2 py-1 small">'+castLbl+'</span>');
+        if(codecLbl) parts.push('<span class="badge '+badgeCls+' rounded-pill px-2 py-1 small">'+codecLbl+'</span>');
+        if(qualityLbl) parts.push('<span class="badge '+badgeCls+' rounded-pill px-2 py-1 small">'+qualityLbl+'</span>');
+        if(fpsLbl) parts.push('<span class="badge '+badgeCls+' rounded-pill px-2 py-1 small">'+fpsLbl+'</span>');
+        if(audioLbl) parts.push('<span class="badge '+badgeCls+' rounded-pill px-2 py-1 small">'+audioLbl+'</span>');
+        progressInfoMeta.innerHTML = parts.join('');
+      }
+      if(!startStr && !endStr && !title && !progressInfoMode.textContent){
+        progressInfoWrap.classList.add('d-none');
+      }else{
+        progressInfoWrap.classList.remove('d-none');
+      }
+    }
+
+    function resolve(url){
+      var m=/\.m3u8(\?|$)/i.test(url)||url.indexOf('m3u8')>-1;
+      var base=m?('/api/proxy/hls?url='):('/api/proxy/stream?url=');
+      var qs=[];
+      var nm=(current&&((current.tvgName||current.name)||''))||(tvgName||title||'');
+      if(nm) qs.push('title='+encodeURIComponent(nm));
+      var md=isLive?'直播':'回放';
+      var cast='单播';
+      try{
+        var raw=String(url||'').trim();
+        var isMc=/^(rtp|udp):\/\//i.test(raw)||/\/rtp\//i.test(raw);
+        cast=isMc?'组播':'单播';
+      }catch(e){}
+      qs.push('mode='+encodeURIComponent(md));
+      qs.push('cast='+encodeURIComponent(cast));
+      var prog='';
+      if(isLive && currentLiveProgram && currentLiveProgram.title){ prog=currentLiveProgram.title; }
+      if(!isLive && currentReplayProgram && currentReplayProgram.title){ prog=currentReplayProgram.title; }
+      if(prog) qs.push('programTitle='+encodeURIComponent(prog));
+      var sc='internal';
+      try{ sc=(localStorage.getItem('useExternal')==='true')?'external':'internal'; }catch(e){}
+      qs.push('scope='+encodeURIComponent(sc));
+      return base+encodeURIComponent(url)+(qs.length?('&'+qs.join('&')):'');
+    }
+
+    function resetReco(){
+      _reco.n=0;
+      if(_reco.t){clearTimeout(_reco.t);_reco.t=null}
+      if(_reco.stall){clearTimeout(_reco.stall);_reco.stall=null}
+    }
+
+    function scheduleReco(playUrl){
+      if(_reco.n>=5) return;
+      var d=Math.min(15000,Math.round(1000*Math.pow(1.8,_reco.n)));
+      _reco.n++;
+      if(_reco.t) clearTimeout(_reco.t);
+      _reco.t=setTimeout(function(){
+        if(playUrl){ start(playUrl) }
+      },d);
+      logStatus('计划重试第 '+_reco.n+' 次，'+d+'ms 后');
+    }
+
+    function destroyPlayer(){
+      if(currentPlayer){
+        try{currentPlayer.unload&&currentPlayer.unload()}catch(e){}
+        try{currentPlayer.detachMediaElement&&currentPlayer.detachMediaElement()}catch(e){}
+        try{currentPlayer.destroy&&currentPlayer.destroy()}catch(e){}
+        currentPlayer=null;
+      }
+      if(v && v._hls){
+        try{v._hls.destroy()}catch(e){}
+        v._hls=null;
+      }
+      if(v){
+        v.removeAttribute('src');
+        v.load();
+      }
+    }
+
+    function renderSourceList(){
+      if(!sourcePanel) return;
+      sourcePanel.innerHTML='';
+      sources.forEach(function(s,idx){
+        var row=document.createElement('div');
+        row.className='source-row'+(idx===currentSourceIndex?' active':'');
+        var dot=document.createElement('span');
+        dot.className='source-tag';
+        row.appendChild(dot);
+        var text=document.createElement('span');
+        text.textContent=s.label;
+        row.appendChild(text);
+        row.addEventListener('click',function(e){
+          e.stopPropagation();
+          hideSourcePanel();
+          selectSource(idx,true);
+        });
+        sourcePanel.appendChild(row);
+      });
+    }
+
+    function ensureSourceUi(){
+      if(rawUrl) return;
+      if(sourceBtn && sourcePanel) return;
+      var root=qierPlayer&&qierPlayer.el;
+      if(!root) return;
+      var volume=root.querySelector('.qier-player_controller_volume');
+      if(!volume) return;
+      var row=volume.parentElement;
+      if(!row) return;
+      liveBtn=document.createElement('button');
+      liveBtn.id='liveBtn';
+      liveDot=document.createElement('span');
+      liveDot.id='liveBtn_dot';
+      liveLabelEl=document.createElement('span');
+      liveBtn.appendChild(liveDot);
+      liveBtn.appendChild(liveLabelEl);
+      updateLiveBadge();
+
+      sourceBtn=document.createElement('button');
+      sourceBtn.id='sourceBtn';
+      var srcIcon=document.createElement('i');
+      srcIcon.className='bi bi-diagram-3';
+      sourceBtn.appendChild(srcIcon);
+      sourceBtn.title='选择线路';
+      sourceLabelEl=document.createElement('span'); // hidden label holder (for title updates)
+      sourceLabelEl.style.display='none';
+      sourceBtn.appendChild(sourceLabelEl);
+      sourceBtn.addEventListener('mouseenter',function(e){
+        e.stopPropagation();
+        showSourcePanel();
+      });
+      sourceBtn.addEventListener('mouseleave',function(){
+        setTimeout(function(){
+          if(!sourcePanel) return;
+          if(!sourcePanel.matches(':hover') && !sourceBtn.matches(':hover')){
+            hideSourcePanel();
+          }
+        },80);
+      });
+      row.insertBefore(sourceBtn, volume);
+      row.insertBefore(liveBtn, sourceBtn);
+      sourcePanel=document.createElement('div');
+      sourcePanel.id='sourcePanel';
+      sourcePanel.className='qier-player_popover_panel';
+      sourcePanel.addEventListener('mouseleave',function(){
+        hideSourcePanel();
+      });
+      sourceBtn.appendChild(sourcePanel);
+      renderSourceList();
+    }
+
+    function showSourcePanel(){
+      if(!sourcePanel || !sourceBtn) return;
+      sourcePanel.style.display='block';
+    }
+
+    function hideSourcePanel(){
+      if(!sourcePanel) return;
+      sourcePanel.style.display='none';
+    }
+
+    function showInfo(){
+      if(!infoOverlay) return;
+      infoOverlay.classList.remove('is-hidden');
+      if(infoTimer) clearTimeout(infoTimer);
+      infoTimer=setTimeout(function(){
+        if(infoOverlay) infoOverlay.classList.add('is-hidden');
+      },INFO_HIDE_MS);
+    }
+
+    function hideUi(){
+      if(uiCompact) return;
+      if(isHoveringUi){
+        resetUiTimer();
+        return;
+      }
+      if(channelLayer) channelLayer.classList.add('collapsed');
+      if(epgLayer) epgLayer.classList.add('hidden');
+      lastHideTs=Date.now();
+    }
+
+    function showUi(){
+      if(uiCompact) return;
+      if(channelLayer) channelLayer.classList.remove('collapsed');
+      if(epgLayer) epgLayer.classList.remove('hidden');
+      resetUiTimer();
+    }
+
+    function resetUiTimer(){
+      if(uiCompact) return;
+      if(uiTimer) clearTimeout(uiTimer);
+      uiTimer=setTimeout(hideUi,UI_HIDE_MS);
+    }
+
+    if(closeBtn && !uiCompact){
+      closeBtn.onclick=function(){
+        hideUi();
+      };
+    }
+    if(!uiCompact){
+      document.addEventListener('mousemove',function(){
+        if(Date.now()-lastHideTs<800) return;
+        showUi();
+      });
+      document.addEventListener('touchstart',function(){
+        if(Date.now()-lastHideTs<800) return;
+        showUi();
+      });
+    }
+    document.addEventListener('mousemove',function(){showInfo()});
+    document.addEventListener('touchstart',function(){showInfo()});
+    showInfo();
+
+    function normalizeName(v){ return String(v||'').trim().replace(/\s+/g,''); }
+    function areaOf(r){
+      var m=String(r||'').trim().match(/^(\d+)\s*x\s*(\d+)$/i);
+      if(!m) return 0;
+      var w=parseInt(m[1],10),h=parseInt(m[2],10);
+      if(isNaN(w)||isNaN(h)) return 0;
+      return w*h;
+    }
+    function bitRateValue(v){
+      if(typeof v==='number' && !isNaN(v)) return v;
+      var s=String(v||'').trim().toLowerCase();
+      if(!s) return 0;
+      var n=parseFloat(s);
+      if(/mbps/.test(s)) return isNaN(n)?0:n*1000000;
+      if(/kbps/.test(s)) return isNaN(n)?0:n*1000;
+      if(/bps/.test(s)) return isNaN(n)?0:n;
+      return isNaN(n)?0:n;
+    }
+    function cctvNumberFrom(str){
+      var m=String(str||'').toUpperCase().match(/CCTV[ -]?(\d{1,2})/);
+      if(!m) return null;
+      var n=parseInt(m[1],10);
+      if(!isNaN(n)&&n>=1&&n<=60) return n;
+      return null;
+    }
+    function resTag(r){
+      var m=String(r||'').trim().match(/^(\d+)\s*x\s*(\d+)$/i);
+      if(!m) return '';
+      var w=parseInt(m[1],10),h=parseInt(m[2],10);
+      if((!isNaN(w)&&w>=3200)||(!isNaN(h)&&h>=1800)) return 'UHD';
+      if((!isNaN(w)&&w>=1280)||(!isNaN(h)&&h>=720)) return 'HD';
+      return 'SD';
+    }
+    function formatFps(fr){
+      var v2=parseFloat(fr);
+      if(isNaN(v2)) return '';
+      var r=Math.round(v2);
+      if(Math.abs(v2-r)<0.01) return String(r)+'fps';
+      return String(parseFloat(v2.toFixed(2)))+'fps';
+    }
+    function formatCodec(c){
+      var v=String(c||'').trim().toLowerCase();
+      if(!v) return '';
+      if(v==='hevc'||v==='h265'||v==='h.265') return 'HEVC';
+      if(v==='h264'||v==='h.264'||v==='avc') return 'AVC';
+      if(v.indexOf('mpeg2')!==-1||v==='mpeg-2') return 'MPEG-2';
+      if(v.indexOf('mpeg4')!==-1||v==='mpeg-4') return 'MPEG-4';
+      if(v==='vp9') return 'VP9';
+      if(v==='av1') return 'AV1';
+      return v.toUpperCase();
+    }
+    function channelKeyFromStream(s){ return normalizeName(s.tvgName||s.name||''); }
+    function describeSource(it){
+      if(!it) return '';
+      var isMc=isMulticastStream(it);
+      var rt=resTag(it.resolution||'');
+      var fps=it.frameRate?formatFps(it.frameRate):'';
+      var base=isMc?'组播':'单播';
+      var tail=(rt?('-'+rt):'')+(fps?('-'+fps):'');
+      return base+tail;
+    }
+    function isMulticastStream(s){
+      var u=String(s.multicastUrl||'').trim();
+      var scheme=u.split(':')[0].toLowerCase();
+      return !!s.udpxyUrl||scheme==='rtp'||scheme==='udp'||u.indexOf('/rtp/')>-1;
+    }
+    function isCctvName(nm){ return /^(CCTV|央视)/i.test(String(nm||'')); }
+    function isWeiShiName(nm,grp){
+      var n=String(nm||''),g=String(grp||'');
+      return /卫视/.test(n)||/卫视/.test(g);
+    }
+    function matchSearch(s,q){
+      if(!q) return true;
+      var a=(String(s.name||'')+' '+String(s.tvgName||'')+' '+String(s.tvgId||'')+' '+String(s.groupTitle||'')).toLowerCase();
+      return a.indexOf(q.toLowerCase())>=0;
+    }
+    function groupByName(list){
+      var map={};
+      list.forEach(function(s){
+        var key=normalizeName(s.tvgName||s.name||'');
+        if(!map[key]) map[key]={name:(s.tvgName||s.name||'未命名频道'),key:key,logo:s.logo||'',items:[]};
+        map[key].items.push(s);
+      });
+      return map;
+    }
+    function classifyChannelEntry(entry){
+      var nm=String(entry&&entry.name||'');
+      var first=entry&&entry.items&&entry.items[0]||{};
+      var grp=String(first.groupTitle||'');
+      if(isCctvName(nm)){
+        var num=cctvNumberFrom(nm);
+        if(num===null||isNaN(num)) num=999;
+        return {cat:0,num:num,group:grp,name:nm};
+      }
+      if(isWeiShiName(nm,grp)){
+        return {cat:1,num:0,group:grp,name:nm};
+      }
+      return {cat:2,num:0,group:grp,name:nm};
+    }
+    function selectCategoryForStream(s){
+      if(s.groupTitle){
+        selectedCat='group:'+String(s.groupTitle);
+      }else{
+        selectedCat='all';
+      }
+      buildCatTabs();
+      renderChannels();
+    }
+
+    function mountQier(){
+      if(qierPlayer && qierPlayer.dispose){
+        try{qierPlayer.dispose()}catch(e){}
+      }
+      var PlayerCtor = window.QierPlayer && (window.QierPlayer.Player || window.QierPlayer.default || window.QierPlayer);
+      if(!PlayerCtor){
+        logStatus('QierPlayer 加载失败，未找到全局 Player');
+        return;
+      }
+      qierPlayer=new PlayerCtor({
+        src:'',
+        shortcutOptions:{disabled:false}
+      });
+      qierPlayer.mount('#app');
+      v=qierPlayer.video;
+      if(v){
+        try{
+          v.muted=false;
+          try{ v.removeAttribute('muted'); }catch(e){}
+          v.playsInline=true;
+          v.setAttribute('playsinline','');
+          v.setAttribute('webkit-playsinline','');
+        }catch(e){}
+      }
+      if(v && !v._iptvPlayHooked){
+        v._iptvPlayHooked=true;
+        v.addEventListener('play',function(){
+          isPlaying=true;
+          updateLiveDotBlink();
+        });
+        v.addEventListener('playing',function(){
+          isPlaying=true;
+          updateLiveDotBlink();
+        });
+        v.addEventListener('pause',function(){
+          isPlaying=false;
+          updateLiveDotBlink();
+        });
+        v.addEventListener('ended',function(){
+          isPlaying=false;
+          updateLiveDotBlink();
+        });
+      }
+      ensureSourceUi();
+      ensureProgressProgramUi();
+    }
+
+    var autoplayAwaitClick=false;
+    function start(playUrl){
+      if(!playUrl){
+        logStatus('没有播放地址');
+        return;
+      }
+      if(!v){
+        mountQier();
+      }
+      destroyPlayer();
+      resetReco();
+      logStatus('准备播放: '+playUrl);
+      var isM3u8=/\.m3u8(\?|$)/i.test(rawUrl)||rawUrl.indexOf('m3u8')>-1;
+      if(isM3u8){
+        try{
+          var c=(current&&String(current.codec||'').toLowerCase())||'';
+          if(c==='hevc' && !hevcHlsSwitchOnce){
+            var alts=sourcesForStream(current).filter(function(x){
+              var u=String(x.multicastUrl||'').trim();
+              return u && !/\.m3u8(\?|$)/i.test(u);
             });
-
-            window.addEventListener('beforeunload', function () {
-                try { if (hlsPlayer) hlsPlayer.destroy(); } catch (e) {}
-                try { if (mpegtsPlayer) mpegtsPlayer.destroy(); } catch (e) {}
+            if(alts.length>0){
+              hevcHlsSwitchOnce=true;
+              logStatus('检测到HEVC HLS，优先切换非HLS源');
+              startLiveFor(alts[0]);
+              return;
+            }
+          }
+        }catch(e){}
+      }
+      if(isM3u8){
+        if(!window.Hls){
+          ensureHls().then(function(){ start(playUrl); });
+          return;
+        }
+        if(window.Hls&&Hls.isSupported()){
+          var h=new Hls({
+            lowLatencyMode:false,
+            capLevelToPlayerSize:true,
+            backBufferLength:30,
+            liveSyncDurationCount:3,
+            liveMaxLatencyDurationCount:8,
+            maxBufferLength:20,
+            maxBufferHole:1,
+            nudgeOffset:0.1,
+            nudgeMaxRetry:5,
+            fragLoadingMaxRetry:3,
+            levelLoadingMaxRetry:3,
+            manifestLoadingMaxRetry:3,
+            fragLoadingRetryDelay:1000,
+            levelLoadingRetryDelay:1000,
+            manifestLoadingRetryDelay:1000
+          });
+          currentPlayer=h;
+          v._hls=h;
+          h.on(Hls.Events.MEDIA_ATTACHED,function(){resetReco();logStatus('HLS 已绑定媒体')});
+          h.on(Hls.Events.LEVEL_UPDATED,function(){resetReco()});
+          h.on(Hls.Events.ERROR,function(_,data){
+            if(!data||!data.fatal) return;
+            logStatus('HLS fatal error: '+data.type);
+            if(data.type===Hls.ErrorTypes.NETWORK_ERROR){scheduleReco(playUrl)}
+            else if(data.type===Hls.ErrorTypes.MEDIA_ERROR){
+              try{h.recoverMediaError()}catch(e){scheduleReco(playUrl)}
+            }else{
+              scheduleReco(playUrl);
+            }
+          });
+          v.addEventListener('playing',resetReco,{once:true,passive:true});
+          v.addEventListener('loadeddata',function(){logStatus('已加载数据')},{once:true,passive:true});
+          h.loadSource(playUrl);
+          h.attachMedia(v);
+          if(v){
+            try{ v.muted=false; v.removeAttribute('muted'); }catch(e){}
+            var _p=v.play&&v.play();
+            if(_p&&_p.catch){
+              _p.catch(function(e){
+                logStatus('play 调用失败: '+e);
+                if(String(e).indexOf('NotAllowedError')!==-1){
+                  autoplayAwaitClick=true;
+                  document.addEventListener('click',function(){
+                    autoplayAwaitClick=false;
+                    try{ v.muted=false; v.removeAttribute('muted'); }catch(e){}
+                    v.play&&v.play().catch(function(){});
+                  },{once:true});
+                }
+              });
+            }
+          }
+          logStatus('开始 HLS 播放');
+          return;
+        }
+        v.src=playUrl;
+        v.onstalled=function(){
+          if(_reco.stall) clearTimeout(_reco.stall);
+          _reco.stall=setTimeout(function(){
+            v.load();
+            v.play&&v.play().catch(function(){});
+          },15000);
+        };
+        v.onwaiting=v.onstalled;
+        if(v){
+          try{ v.muted=false; v.removeAttribute('muted'); }catch(e){}
+          var _p0=v.play&&v.play();
+          if(_p0&&_p0.catch){
+            _p0.catch(function(e){
+              logStatus('原生 HLS 播放失败: '+e);
+              if(String(e).indexOf('NotAllowedError')!==-1){
+                autoplayAwaitClick=true;
+                document.addEventListener('click',function(){
+                  autoplayAwaitClick=false;
+                  try{ v.muted=false; v.removeAttribute('muted'); }catch(e){}
+                  v.play&&v.play().catch(function(){});
+                },{once:true});
+              }
             });
+          }
+        }
+        logStatus('使用原生 HLS 播放');
+        return;
+      }
+      if(!window.mpegts){
+        ensureMpegts().then(function(){ start(playUrl); });
+        return;
+      }
+      if(!window.mpegts||!mpegts.isSupported()||!mpegts.getFeatureList().mseLivePlayback){
+        v.src=playUrl;
+        v.play().catch(function(e){logStatus('直接播放 TS 失败: '+e)});
+        logStatus('环境不支持 mpegts.js，尝试直接播放');
+        return;
+      }
+      if(mpegts.LoggingControl){
+        try{
+          mpegts.LoggingControl.enableDebug=false;
+          mpegts.LoggingControl.enableVerbose=false;
+        }catch(e){}
+      }
+      var mediaDataSource={type:'mse',isLive:true,url:playUrl,liveBufferLatencyChasing:true};
+      var config={
+        isLive:true,
+        enableStashBuffer:true,
+        stashInitialSize:256*1024,
+        liveBufferLatencyChasing:true,
+        liveBufferLatencyMaxLatency:1.2,
+        liveBufferLatencyMinRemain:0.3,
+        autoCleanupSourceBuffer:true,
+        autoCleanupMaxBackwardDuration:120,
+        autoCleanupMinBackwardDuration:60,
+        fixAudioTimestampGap:true,
+        lazyLoad:false
+      };
+      try{
+        var player=mpegts.createPlayer(mediaDataSource,config);
+        currentPlayer=player;
+        player.attachMediaElement(v);
+        player.load();
+        var _pp = player.play && player.play();
+        if(_pp && _pp.catch){
+          _pp.catch(function(e){
+            if(String(e).indexOf('NotAllowedError')!==-1){
+              autoplayAwaitClick=true;
+              document.addEventListener('click',function(){
+                autoplayAwaitClick=false;
+                player.play&&player.play();
+              },{once:true});
+            }
+          });
+        }
+        player.on(mpegts.Events.ERROR,function(type,detail){
+          logStatus('mpegts error: '+type);
+          if(!autoplayAwaitClick){
+            scheduleReco(playUrl);
+          }
+        });
+        logStatus('开始 mpegts.js 播放');
+      }catch(e){
+        logStatus('创建 mpegts player 失败: '+e);
+      }
+    }
+
+    function selectSource(idx,play){
+      if(idx<0||idx>=sources.length) return;
+      currentSourceIndex=idx;
+      var s=sources[idx];
+      if(sourceBtn){
+        sourceBtn.title=s.label;
+      }
+      // 将当前源的元信息应用到当前上下文，保证“单播/组播、UHD/HD/SD、帧率”随切换更新
+      if(s && s.meta){
+        current = s.meta;
+        updateProgramProgressLabel();
+      }
+      try{
+        var nm = String((current&&current.tvgName)|| (current&&current.name) || '');
+        var ss = {
+          name: nm,
+          multicastUrl: String((current&&current.multicastUrl)||''),
+          resolution: String((current&&current.resolution)||''),
+          frameRate: String((current&&current.frameRate)||'')
+        };
+        if(nm){ localStorage.setItem('lastSource', JSON.stringify(ss)); }
+      }catch(e){}
+      renderSourceList();
+      if(play){
+        rawUrl=s.url;
+        var playUrl=resolve(rawUrl);
+        start(playUrl);
+      }
+    }
+
+    function expandAndFocusChannel(key){
+      var listWrap=channelList;
+      var scrollWrap=document.getElementById('channelScroll')||channelLayer;
+      if(!listWrap) return;
+      var allBodies=listWrap.querySelectorAll('.channel-body');
+      allBodies.forEach(function(b){
+        b.classList.add('d-none');
+        b.classList.remove('d-flex');
+      });
+      var allCarets=listWrap.querySelectorAll('.bi-caret-up-fill');
+      allCarets.forEach(function(c){
+        c.classList.replace('bi-caret-up-fill','bi-caret-down-fill');
+      });
+      var item=listWrap.querySelector('.channel-item[data-key="'+key+'"]');
+      if(item){
+        var body=item.querySelector('.channel-body');
+        var caret=item.querySelector('.bi-caret-down-fill, .bi-caret-up-fill');
+        if(body){
+          body.classList.remove('d-none');
+          body.classList.add('d-flex');
+        }
+        if(caret && caret.classList.contains('bi-caret-down-fill')){
+          caret.classList.replace('bi-caret-down-fill','bi-caret-up-fill');
+        }
+        var items=listWrap.querySelectorAll('.channel-item');
+        items.forEach(function(el){
+          if(el===item) el.classList.add('active'); else el.classList.remove('active');
+        });
+        if(item.scrollIntoView){
+          item.scrollIntoView({behavior:'auto',block:'start'});
+        }else if(scrollWrap){
+          try{scrollWrap.scrollTop=item.offsetTop-(scrollWrap.offsetTop||0);}catch(e){}
+        }
+      }
+    }
+
+    function isPlayable(s){
+      var u=String(s.multicastUrl||'').trim();
+      return /^https?:\/\//i.test(u)||/^(rtp|udp):\/\//i.test(u);
+    }
+
+    function liveRawUrl(s){
+      var u=String(s.multicastUrl||'').trim();
+      if(u.indexOf('$')!==-1){ u=u.split('$')[0]; }
+      var base=u;
+      if(/^(rtp|udp):\/\//i.test(u)&&s.udpxyUrl){
+        var udpxy=String(s.udpxyUrl).trim().replace(/\/+$/,'');
+        var addr=u.replace(/^(rtp|udp):\/\//i,'');
+        base=udpxy+'/rtp/'+addr;
+      }
+      var isMc=isMulticastStream(s);
+      var raw=base;
+      if(isMc && s.httpParam){
+        var hasQ=raw.indexOf('?')>-1;
+        if(raw.indexOf(s.httpParam)===-1){
+          raw=raw+(hasQ?'&':'?')+s.httpParam;
+        }
+      }
+      return raw;
+    }
+
+    function getScope(){
+      try{
+        return (localStorage.getItem('useExternal')==='true')?'external':'internal';
+      }catch(e){
+        return 'internal';
+      }
+    }
+
+    function channelKey(s){
+      return String((s&&s.tvgName)||s&&s.name||'').trim().replace(/\s+/g,'');
+    }
+
+    function playable(u){
+      return /^https?:\/\//i.test(u)||/^(rtp|udp):\/\//i.test(u);
+    }
+
+    function sourcesForStream(s){
+      if(!s) return [];
+      var key=channelKey(s);
+      var list=streams.filter(function(x){
+        return channelKey(x)===key && playable(String(x.multicastUrl||''));
+      });
+      list.sort(function(a,b){
+        var aM=isMulticastStream(a)?1:0,bM=isMulticastStream(b)?1:0;
+        if(aM!==bM) return bM-aM;
+        var ab=bitRateValue(a.bitRate),bb=bitRateValue(b.bitRate);
+        if(ab!==bb) return bb-ab;
+        var ar=areaOf(a.resolution),br=areaOf(b.resolution);
+        if(ar!==br) return br-ar;
+        var af=parseFloat(a.frameRate)||0,bf=parseFloat(b.frameRate)||0;
+        return bf-af;
+      });
+      return list;
+    }
+
+    function renderSourcePanelFor(s){
+      var list=sourcesForStream(s);
+      sources=list.map(function(it){
+        return {url:liveRawUrl(it),label:describeSource(it),meta:it};
+      });
+      var activeIdx=list.findIndex(function(it){
+        return it.multicastUrl===s.multicastUrl && it.resolution===s.resolution && it.frameRate===s.frameRate;
+      });
+      if(activeIdx<0 && list.length>0) activeIdx=0;
+      currentSourceIndex=activeIdx;
+      renderSourceList();
+      if(currentSourceIndex>=0 && sources[currentSourceIndex]){
+        if(sourceBtn) sourceBtn.title = sources[currentSourceIndex].label;
+        if(sourceLabelEl) sourceLabelEl.textContent = sources[currentSourceIndex].label;
+      }
+    }
+
+    function startLiveFor(s){
+      current=s;
+      currentReplayProgram=null;
+      currentLiveProgram=null;
+      if(titleEl) titleEl.textContent=s.name||s.tvgName||'IPTV 播放';
+      if(subEl) subEl.textContent=s.tvgName||s.name||'';
+      var logoC=s.logo;
+      var alt=logoUrlForSized(s.tvgName||s.name||'',{h:48,fit:'contain',fmt:'webp'});
+      if(alt) logoC=alt;
+      if(logoImg){
+        logoImg.onerror=function(){ this.onerror=null; this.src='/iptv.png'; this.classList.remove('d-none'); };
+        logoImg.src = logoC || '/iptv.png';
+        logoImg.classList.remove('d-none');
+      }
+      if(liveBadge) liveBadge.classList.remove('d-none');
+      if(replayBadge) replayBadge.classList.add('d-none');
+      tvgId=s.tvgId||'';
+      tvgName=s.tvgName||s.name||'';
+      isLive=true;
+      updateLiveBadge();
+      updateProgramProgressLabel();
+      showInfo();
+      renderSourcePanelFor(s);
+      try{
+        var rememberName = s.tvgName || s.name || '';
+        if(rememberName){ localStorage.setItem('lastChannelName', rememberName); }
+        var ss = {
+          name: rememberName,
+          multicastUrl: String(s.multicastUrl||''),
+          resolution: String(s.resolution||''),
+          frameRate: String(s.frameRate||'')
+        };
+        if(rememberName){ localStorage.setItem('lastSource', JSON.stringify(ss)); }
+      }catch(e){}
+      if(sources.length>0){
+        var idx=(currentSourceIndex>=0)?currentSourceIndex:0;
+        selectSource(idx,true);
+      }
+      selectedDate=new Date();
+      buildDateTabs();
+      loadEpgForStream(s);
+      selectCategoryForStream(s);
+      var k=normalizeName(s.tvgName||s.name||'');
+      expandAndFocusChannel(k);
+      try{
+        var cast=isMulticastStream(s)?'组播':'单播';
+        var sc=getScope()==='external'?'external':'internal';
+        fetch('/api/player/log',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+          name:s.name||s.tvgName||'',
+          tvgName:s.tvgName||'',
+          mode:'直播',
+          cast:cast,
+          scope:sc,
+          programTitle:(channelNowTitleByKey[k]||'')
+        })}).catch(function(){});
+      }catch(e){}
+    }
+
+    function fetchAndRenderEpg(stream,opts){
+      var d=selectedDate||new Date();
+      d.setHours(0,0,0,0);
+      var y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0');
+      var pd=new Date(d);
+      pd.setDate(d.getDate()-1);
+      var py=pd.getFullYear(),pm=String(pd.getMonth()+1).padStart(2,'0'),pdd=String(pd.getDate()).padStart(2,'0');
+      var s=stream||current||{};
+      var chId=s.tvgId||s.tvgName||s.name||tvgId||title||'';
+      var chName=s.tvgName||s.name||tvgName||title||'';
+      var baseParams=function(dateStr){
+        var p=new URLSearchParams();
+        p.set('scope',getScope());
+        p.set('channelId',chId);
+        p.set('channelName',chName);
+        p.set('date',dateStr);
+        if(epgId||(epgSel&&epgSel.value)) p.set('epgId',(epgSel&&epgSel.value)||epgId);
+        if(opts&&opts.force) p.set('force','1');
+        p.set('t',String(Date.now()));
+        return p.toString();
+      };
+      var p1=fetch('/api/epg/programs?'+baseParams(y+'-'+m+'-'+dd)).then(function(r){return r.json()}).catch(function(){return{};});
+      var p2=fetch('/api/epg/programs?'+baseParams(py+'-'+pm+'-'+pdd)).then(function(r){return r.json()}).catch(function(){return{};});
+      Promise.all([p1,p2]).then(function(res){
+        var curr=Array.isArray(res[0].programs)?res[0].programs:[];
+        var prev=Array.isArray(res[1].programs)?res[1].programs:[];
+        var dayStart=d.getTime();
+        var dayEnd=dayStart+86400000;
+        var fromPrev=prev.filter(function(p){return p.endMs>dayStart;});
+        var fromCurr=curr.filter(function(p){return p.startMs<dayEnd;});
+        var map={};
+        fromPrev.forEach(function(p){map[p.startMs]=p;});
+        fromCurr.forEach(function(p){map[p.startMs]=p;});
+        var list=Object.values(map).sort(function(a,b){return a.startMs-b.startMs;});
+        list=list.filter(function(p){return p.startMs<dayEnd && p.endMs>dayStart;});
+        renderEpgList(list,stream);
+      });
+    }
+
+    function loadEpgForStream(s){
+      fetchAndRenderEpg(s);
+    }
+
+    function doReplay(s,p){
+      currentReplayProgram=p;
+      updateProgramProgressLabel();
+      var qsObj=new URLSearchParams();
+      qsObj.set('scope',getScope());
+      qsObj.set('fmt','ku9');
+      qsObj.set('proto','http');
+      qsObj.set('name',s.name||'');
+      qsObj.set('tvgName',s.tvgName||'');
+      qsObj.set('resolution',s.resolution||'');
+      qsObj.set('frameRate',s.frameRate||'');
+      qsObj.set('multicastUrl',s.multicastUrl||'');
+      qsObj.set('catchupBase',s.catchupBase||'');
+      qsObj.set('startMs',p.startMs);
+      qsObj.set('endMs',p.endMs);
+      function resolveReplaySmart(raw){
+        var isM3u8=/\.m3u8(\?|$)/i.test(raw)||raw.toLowerCase().indexOf('m3u8')>-1;
+        if(isM3u8){
+          return Promise.resolve('/api/proxy/hls?url='+encodeURIComponent(raw));
+        }
+        var hlsProbe='/api/proxy/hls?url='+encodeURIComponent(raw);
+        return fetch(hlsProbe, {method:'GET'}).then(function(resp){
+          return resp.text().then(function(t){
+            var ct=(resp.headers.get('content-type')||'').toLowerCase();
+            var head=t.slice(0,32);
+            if(resp.ok && (ct.indexOf('application/vnd.apple.mpegurl')>-1 || head.indexOf('#EXTM3U')===0 || t.indexOf('#EXTM3U')>-1)){
+              return hlsProbe;
+            }
+            return '/api/proxy/stream?url='+encodeURIComponent(raw);
+          });
+        }).catch(function(){
+          return '/api/proxy/stream?url='+encodeURIComponent(raw);
+        });
+      }
+      fetch('/api/catchup/play?'+qsObj.toString()).then(function(r){return r.json()}).then(function(x){
+        if(x&&x.success&&x.url){
+          var raw=x.url||'';
+          if(raw.indexOf('$')!==-1){ raw=raw.split('$')[0]; }
+          resolveReplaySmart(raw).then(function(playUrl){
+            rawUrl=raw;
+            if(subEl) subEl.textContent=p.title||'';
+            if(liveBadge) liveBadge.classList.add('d-none');
+            if(replayBadge) replayBadge.classList.remove('d-none');
+            isLive=false;
+            updateLiveBadge();
+            showInfo();
+            try{
+              var sc3=getScope()==='external'?'external':'internal';
+              fetch('/api/player/log',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+                name:s.name||s.tvgName||'',
+                tvgName:s.tvgName||'',
+                mode:'回放',
+                cast:'单播',
+                scope:sc3,
+                programTitle:p.title||'',
+                url:raw
+              })}).catch(function(){});
+            }catch(e){}
+            start(playUrl);
+          });
+        }else{
+          alert('无法获取回放地址');
+        }
+      }).catch(function(e){
+        alert('回放请求失败: '+e);
+      });
+    }
+
+    function renderEpgList(list,s){
+      if(!epgList||!epgHint) return;
+      epgList.innerHTML='';
+      if(!Array.isArray(list)||list.length===0){
+        try{
+          var d = new Date(selectedDate||Date.now());
+          d.setHours(0,0,0,0);
+          var ph=[];
+          for(var h=0;h<24;h++){
+            var st=new Date(d); st.setHours(h,0,0,0);
+            var et=new Date(d); et.setHours(h+1,0,0,0);
+            ph.push({ title:'精彩节目', startMs: st.getTime(), endMs: et.getTime() });
+          }
+          list = ph;
+          epgHint.textContent='';
+        }catch(e){
+          epgHint.textContent='暂无节目单';
+          return;
+        }
+      }
+      epgHint.textContent='';
+      var now=Date.now();
+      var foundLive=false;
+      list.forEach(function(p){
+        var it=document.createElement('button');
+        it.type='button';
+        it.className='list-group-item list-group-item-action bg-transparent epg-item d-flex justify-content-between align-items-center';
+        var tm=new Date(p.startMs),em=new Date(p.endMs);
+        var t=String(tm.getHours()).padStart(2,'0')+':'+String(tm.getMinutes()).padStart(2,'0')+' - '+String(em.getHours()).padStart(2,'0')+':'+String(em.getMinutes()).padStart(2,'0');
+        var left=document.createElement('div');
+        left.innerHTML='<div class="small muted">'+t+'</div><div>'+ (p.title||'无标题') +'</div>';
+        var right=document.createElement('div');
+        var isLiveNow=p.startMs<=now && p.endMs>now;
+        var isPast=p.endMs<=now;
+        if(isLiveNow){
+          right.innerHTML='<span class="badge badge-live rounded-pill px-2 py-1">LIVE</span>';
+          it.classList.add('active-epg');
+          foundLive=true;
+          currentLiveTitle=p.title||'';
+        currentLiveProgram=p;
+          var keyForNow=null;
+          if(s){keyForNow=channelKeyFromStream(s);}
+          else if(current){keyForNow=channelKeyFromStream(current);}
+          if(keyForNow){channelNowTitleByKey[keyForNow]=p.title||'';}
+          if(subEl && replayBadge && replayBadge.classList.contains('d-none')){
+            subEl.textContent=p.title||'';
+          }
+          showInfo();
+        updateProgramProgressLabel();
+        }else if(!isPast){
+          right.innerHTML='<span class="badge bg-secondary">待播</span>';
+        }else{
+          if(currentReplayProgram && p.startMs===currentReplayProgram.startMs && p.title===currentReplayProgram.title){
+            right.innerHTML='<span class="badge badge-replay rounded-pill px-2 py-1">正在回放</span>';
+            it.classList.add('active-epg');
+          }else{
+            right.innerHTML='<span class="badge bg-success">回看</span>';
+          }
+        }
+        it.appendChild(left);
+        it.appendChild(right);
+        it.onclick=function(){
+          if(isLiveNow){
+            currentReplayProgram=null;
+          currentLiveProgram=p;
+          updateProgramProgressLabel();
+            startLiveFor(s||current);
+            renderEpgList(list,s||current);
+          }else if(!isPast){
+          }else{
+            doReplay(s||current,p);
+            renderEpgList(list,s||current);
+          }
+        };
+        epgList.appendChild(it);
+      });
+      if(foundLive){
+        setTimeout(function(){
+          var act=epgList.querySelector('.active-epg');
+          if(act) act.scrollIntoView({behavior:'smooth',block:'center'});
+        },100);
+        try{
+          if(current && currentLiveProgram && currentLiveProgram.title){
+            var k2=channelKeyFromStream(current);
+            var cast2=isMulticastStream(current)?'组播':'单播';
+            var sc2=getScope()==='external'?'external':'internal';
+            fetch('/api/player/log',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+              name:current.name||current.tvgName||'',
+              tvgName:current.tvgName||'',
+              mode:'直播',
+              cast:cast2,
+              scope:sc2,
+              programTitle:currentLiveProgram.title||''
+            })}).catch(function(){});
+          }
+        }catch(e){}
+      }
+    }
+
+    function buildDateTabs(){
+      if(!epgDateTabs) return;
+      epgDateTabs.innerHTML='';
+      var today=new Date();
+      today.setHours(0,0,0,0);
+      var items=[];
+      for(var i=-3;i<=3;i++){
+        var d=new Date(today);
+        d.setDate(today.getDate()+i);
+        items.push(d);
+      }
+      items.forEach(function(d){
+        var mm=String(d.getMonth()+1).padStart(2,'0');
+        var dd=String(d.getDate()).padStart(2,'0');
+        var w=['日','一','二','三','四','五','六'][d.getDay()];
+        var sd=new Date(selectedDate);
+        sd.setHours(0,0,0,0);
+        var isSel=d.getTime()===sd.getTime();
+        var btnEl=document.createElement('button');
+        btnEl.className='nav-link py-0 px-2 small text-nowrap'+(isSel?' active':'');
+        btnEl.textContent=(d.getTime()===today.getTime()?'今日':'周'+w)+' '+mm+'/'+dd;
+        btnEl.onclick=function(){
+          selectedDate=new Date(d);
+          buildDateTabs();
+          if(current) loadEpgForStream(current); else fetchAndRenderEpg(null);
+        };
+        var li=document.createElement('li');
+        li.className='nav-item';
+        li.appendChild(btnEl);
+        epgDateTabs.appendChild(li);
+        if(isSel){
+          setTimeout(function(){
+            li.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
+          },100);
+        }
+      });
+    }
+
+    function buildCatTabs(){
+      if(!catTabs) return;
+      var map={};
+      streams.forEach(function(s){
+        var g=String(s.groupTitle||'').trim();
+        if(g) map[g]=true;
+      });
+      var groups=Object.keys(map).sort(function(a,b){
+        return String(a).localeCompare(String(b),'zh-CN',{numeric:true,sensitivity:'base'});
+      });
+      catTabs.innerHTML='';
+      var defs=[{t:'全部',v:'all'}];
+      var all=defs.concat(groups.map(function(g){return {t:g,v:'group:'+g};}));
+      all.forEach(function(it){
+        var li=document.createElement('li');
+        li.className='nav-item';
+        var btnEl=document.createElement('button');
+        btnEl.className='nav-link py-1'+(selectedCat===it.v?' active':'');
+        btnEl.setAttribute('data-cat',it.v);
+        btnEl.textContent=it.t;
+        btnEl.onclick=function(){
+          Array.from(catTabs.querySelectorAll('button[data-cat]')).forEach(function(x){x.classList.remove('active');});
+          this.classList.add('active');
+          selectedCat=this.getAttribute('data-cat');
+          renderChannels();
+        };
+        li.appendChild(btnEl);
+        catTabs.appendChild(li);
+      });
+    }
+
+    // 并发控制：限制“当前节目”并发请求，避免首屏卡顿
+    var NOW_FETCH_MAX=4;
+    var nowFetchInFlight=0;
+    var nowFetchQueue=[];
+    function runNowFetchQueue(){
+      if(nowFetchInFlight>=NOW_FETCH_MAX) return;
+      var t=nowFetchQueue.shift();
+      if(!t) return;
+      nowFetchInFlight++;
+      t(function done(){
+        nowFetchInFlight=Math.max(0,nowFetchInFlight-1);
+        if(nowFetchQueue.length>0){
+          // 让浏览器喘口气
+          setTimeout(runNowFetchQueue,0);
+        }
+      });
+    }
+
+    var channelNowObserver=null;
+    var nonCriticalInited=false;
+    function ensureNowObserver(){
+      if(channelNowObserver) return channelNowObserver;
+      var root=document.getElementById('channelScroll')||null;
+      try{
+        if('IntersectionObserver' in window){
+          channelNowObserver=new IntersectionObserver(function(entries){
+            entries.forEach(function(en){
+              var t=en.target;
+              if(!en.isIntersecting) return;
+              if(t && t._nowFetchPayload && !t._nowFetched){
+                t._nowFetched=true;
+                var p=t._nowFetchPayload;
+                enqueueNowFetch(p.entry,p.el,p.group);
+              }
+              if(channelNowObserver) channelNowObserver.unobserve(t);
+            });
+          },{root:root,threshold:0.05});
+        }
+      }catch(e){}
+      return channelNowObserver;
+    }
+    function enqueueNowFetch(entryRef,elRef,groupText){
+      var key=entryRef.key;
+      if(!key) return;
+      var s0=(entryRef.items && entryRef.items[0])?entryRef.items[0]:null;
+      if(!s0) return;
+      var chId=s0.tvgId||s0.tvgName||s0.name||'';
+      var chName=s0.tvgName||s0.name||'';
+      if(!chId && !chName) return;
+      nowFetchQueue.push(function(done){
+        var d=new Date();
+        var y=d.getFullYear();
+        var m=String(d.getMonth()+1).padStart(2,'0');
+        var dd=String(d.getDate()).padStart(2,'0');
+        var params=new URLSearchParams();
+        params.set('scope',getScope());
+        params.set('channelId',chId);
+        params.set('channelName',chName);
+        params.set('date',y+'-'+m+'-'+dd);
+        if(epgId||(epgSel&&epgSel.value)) params.set('epgId',(epgSel&&epgSel.value)||epgId);
+        fetch('/api/epg/programs?'+params.toString()).then(function(r){return r.json()}).then(function(j){
+          var list=Array.isArray(j&&j.programs)?j.programs:[];
+          var now=Date.now();
+          var cur=null;
+          for(var i=0;i<list.length;i++){
+            var p=list[i];
+            if(p && p.startMs<=now && p.endMs>now){cur=p;break;}
+          }
+          if(!cur && list.length>0){
+            for(var j2=list.length-1;j2>=0;j2--){
+              var pp=list[j2];
+              if(pp && pp.startMs<=now){cur=pp;break;}
+            }
+            if(!cur) cur=list[0];
+          }
+          if(cur && cur.title){
+            channelNowTitleByKey[key]=cur.title;
+            if(elRef){
+              var base=groupText||'';
+              elRef.textContent=base ? (base+' · '+cur.title) : cur.title;
+            }
+          }
+        }).catch(function(){}).finally(function(){done()});
+      });
+      runNowFetchQueue();
+    }
+    function nonCriticalInit(){
+      if(nonCriticalInited) return;
+      nonCriticalInited=true;
+      buildDateTabs();
+      loadEpgSources();
+      loadStreams();
+    }
+
+    function renderChannels(){
+      if(!channelList) return;
+      var q=searchInput?searchInput.value||'':'';
+      var filtered=streams.filter(function(s){
+        if(!matchSearch(s,q)) return false;
+        if(selectedCat==='all') return true;
+        if(/^group:/.test(selectedCat)){
+          var g=selectedCat.slice(6);
+          return String(s.groupTitle||'')===g;
+        }
+        return true;
+      });
+      var grouped=groupByName(filtered);
+      channelList.innerHTML='';
+      var entries=Object.keys(grouped).map(function(k){return grouped[k];});
+      entries.sort(function(a,b){
+        var ca=classifyChannelEntry(a);
+        var cb=classifyChannelEntry(b);
+        if(ca.cat!==cb.cat) return ca.cat-cb.cat;
+        if(ca.cat===0 && ca.num!==cb.num) return ca.num-cb.num;
+        var ga=String(ca.group||'');
+        var gb=String(cb.group||'');
+        var gcmp=ga.localeCompare(gb,'zh-CN',{numeric:true,sensitivity:'base'});
+        if(gcmp!==0) return gcmp;
+        return String(ca.name||'').localeCompare(String(cb.name||''),'zh-CN',{numeric:true,sensitivity:'base'});
+      });
+      // 分批渲染，减少长任务
+      var BATCH=40, startIdx=0;
+      function renderBatch(){
+        var end=Math.min(entries.length,startIdx+BATCH);
+        for(var i=startIdx;i<end;i++){
+          var entry=entries[i];
+          (function(entry,idx){
+        var sourcesForEntry=entry.items.filter(function(s){
+          var u=String(s.multicastUrl||'').trim();
+          return /^https?:\/\//i.test(u)||/^(rtp|udp):\/\//i.test(u);
+        });
+        if(sourcesForEntry.length===0) return;
+        sourcesForEntry.sort(function(a,b){
+          var areaA=areaOf(a.resolution),areaB=areaOf(b.resolution);
+          if(areaA!==areaB) return areaB-areaA;
+          var fpsA=parseFloat(a.frameRate)||0,fpsB=parseFloat(b.frameRate)||0;
+          return fpsB-fpsA;
+        });
+        var item=document.createElement('div');
+        var isAct=current&&normalizeName(current.tvgName||current.name||'')===entry.key;
+        item.className='list-group-item border-0 channel-item'+(isAct?' active':'');
+        item.setAttribute('data-key',entry.key);
+        var head=document.createElement('div');
+        head.className='d-flex align-items-center gap-2';
+
+        var idxSpan=document.createElement('div');
+        idxSpan.className='channel-index-badge';
+        idxSpan.textContent=String(idx+1);
+        head.appendChild(idxSpan);
+
+        var textWrap=document.createElement('div');
+        textWrap.className='flex-grow-1 overflow-hidden';
+
+        var groupTitle=(sourcesForEntry[0]&&sourcesForEntry[0].groupTitle)||'';
+        var hasReplay=entry.items.some(function(s){
+          var cb=String(s.catchupBase||'').trim();
+          if(cb) return true;
+          var hp=String(s.httpParam||'');
+          return /(?:^|[&?])fcc=/.test(hp);
+        });
+
+        var titleDiv=document.createElement('div');
+        titleDiv.className='channel-title d-flex align-items-center gap-1';
+        var titleSpan=document.createElement('span');
+        titleSpan.className='channel-title-text text-truncate';
+        titleSpan.textContent=entry.name;
+        titleDiv.appendChild(titleSpan);
+        if(hasReplay){
+          var replayIcon=document.createElement('i');
+          replayIcon.className='bi bi-clock-history channel-replay-icon';
+          replayIcon.title='支持回放';
+          titleDiv.appendChild(replayIcon);
+        }
+        textWrap.appendChild(titleDiv);
+
+        var subDiv=document.createElement('div');
+        subDiv.className='channel-sub small text-truncate';
+        var baseText=groupTitle||'';
+        if(baseText) subDiv.textContent=baseText;
+        var nowTitle=channelNowTitleByKey[entry.key]||'';
+        if(nowTitle){
+          subDiv.textContent=baseText ? (baseText+' · '+nowTitle) : nowTitle;
+        }else{
+          var obs=ensureNowObserver();
+          if(obs){
+            item._nowFetchPayload={entry:entry,el:subDiv,group:groupTitle};
+            obs.observe(item);
+          }else{
+            setTimeout(function(){enqueueNowFetch(entry,subDiv,groupTitle)},0);
+          }
+        }
+        textWrap.appendChild(subDiv);
+        head.appendChild(textWrap);
+
+        var rightWrap=document.createElement('div');
+        rightWrap.className='d-flex align-items-center gap-2 ms-auto';
+        var count=document.createElement('span');
+        count.className='badge channel-count-badge';
+        count.textContent=String(sourcesForEntry.length)+'源';
+        rightWrap.appendChild(count);
+        var im=document.createElement('img');
+        (function(){
+          var src=logoUrlForSized(entry.name||entry.key||'',{w:72,h:40,fit:'contain',fmt:'webp'});
+          im.onerror=function(){ this.onerror=null; this.src='/iptv.png'; };
+          im.src=src||'/iptv.png';
         })();
-    </script>
+        im.className='logo-img channel-logo-right';
+        try{im.loading='lazy';}catch(e){}
+        try{im.decoding='async';}catch(e){}
+        try{im.fetchPriority='low';}catch(e){}
+        im.width=72; im.height=40;
+        rightWrap.appendChild(im);
+        head.appendChild(rightWrap);
+
+        head.onclick=function(){
+          var best=sourcesForEntry && sourcesForEntry.length>0 ? sourcesForEntry[0] : null;
+          if(best) startLiveFor(best);
+        };
+        item.appendChild(head);
+        channelList.appendChild(item);
+          })(entry,i);
+        }
+        startIdx=end;
+        if(startIdx<entries.length){
+          setTimeout(renderBatch,0);
+        }
+      }
+      renderBatch();
+    }
+
+    function getSettings(){
+      if(settingsCache) return Promise.resolve(settingsCache);
+      return fetch('/api/settings').then(function(r){return r.json()}).then(function(j){
+        settingsCache=(j&&j.settings)||{};
+        return settingsCache;
+      }).catch(function(){return {};});
+    }
+    function loadLogoTemplate(){
+      return fetch('/api/config/logo-templates').then(function(r){return r.json()}).then(function(j){
+        var list=Array.isArray(j&&j.templatesObj)?j.templatesObj:[];
+        var useExt=(localStorage.getItem('useExternal')==='true');
+        var pick=null;
+        if(useExt){
+          pick=list.find(function(x){return x&&x.category==='外网台标';})||null;
+        }else{
+          pick=list.find(function(x){return x&&x.category==='内网台标';})||null;
+        }
+        externalLogoTpl=pick&&pick.url||'';
+      }).catch(function(){});
+    }
+    function isExternalHost(){
+      var h=window.location.hostname||'';
+      if(h==='localhost'||h==='127.0.0.1') return false;
+      if(/^192\.168\./.test(h)) return false;
+      if(/^10\./.test(h)) return false;
+      if(/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(h)) return false;
+      return true;
+    }
+    function logoUrlFor(name){
+      var nm=String(name||'').trim();
+      if(!nm) return '';
+      var scope=isExternalHost()?'external':getScope();
+      return '/api/logo?name='+encodeURIComponent(nm)+'&scope='+scope;
+    }
+
+    function loadStreams(){
+      function defaultStart(list){
+        if(current||rawUrl) return;
+        try{
+          var savedName = '';
+          var savedSourceRaw = '';
+          try{ savedName = localStorage.getItem('lastChannelName') || ''; }catch(e){}
+          try{ savedSourceRaw = localStorage.getItem('lastSource') || ''; }catch(e){}
+          if(savedName){
+            var sameNameList = list.filter(function(x){
+              var nm = String(x.tvgName||x.name||'');
+              return nm === savedName;
+            });
+            if(sameNameList.length>0){
+              var pick = sameNameList[0];
+              if(savedSourceRaw){
+                try{
+                  var ss = JSON.parse(savedSourceRaw);
+                  if(ss && ss.name === savedName){
+                    var matched = sameNameList.find(function(x){
+                      return String(x.multicastUrl||'')===String(ss.multicastUrl||'') &&
+                             String(x.resolution||'')===String(ss.resolution||'') &&
+                             String(x.frameRate||'')===String(ss.frameRate||'');
+                    });
+                    if(matched) pick = matched;
+                  }
+                }catch(e){}
+              }
+              startLiveFor(pick);
+              return;
+            }
+          }
+        }catch(e){}
+        return;
+      }
+      var useExt=(localStorage.getItem('useExternal')==='true');
+      if(useExt){
+        Promise.all([getSettings(),loadLogoTemplate()]).then(function(arr){
+          var st=arr[0]||{};
+          var qs='?status=all&scope=external';
+          if(st&&st.enableToken&&st.securityToken){ qs+='&token='+encodeURIComponent(st.securityToken); }
+          return fetch('/api/export/json'+qs).then(function(r){
+            if(r.status===403){return {success:false,streams:[]};}
+            return r.json();
+          }).then(function(j){
+            var lst=Array.isArray(j&&j.streams)?j.streams:[];
+            var mapped=lst.map(function(it){
+              var httpUrl=it.httpUrl||'';
+              if(httpUrl.indexOf('$')!==-1){ httpUrl=httpUrl.split('$')[0]; }
+              return {
+                name:it.name||it.tvgName||'',
+                tvgName:it.tvgName||it.name||'',
+                tvgId:it.tvgId||'',
+                logo:logoUrlFor(it.tvgName||it.name||''),
+                groupTitle:it.groupTitle||'',
+                resolution:it.resolution||'',
+                frameRate:it.frameRate||'',
+                codec:it.codec||'',
+                multicastUrl:httpUrl,
+                udpxyUrl:'',
+                catchupBase:it.catchupBase||'',
+                httpParam:it.httpParam||'',
+                isAvailable:!!it.isAvailable
+              };
+            }).filter(function(x){return x.multicastUrl;});
+            streams=mapped;
+            buildCatTabs();
+            renderChannels();
+            var pre=tvgName||title;
+            if(pre && !rawUrl && !current){
+              var p=mapped.filter(function(x){return (x.tvgName||x.name||'')===pre;});
+              if(p.length>0) startLiveFor(p[0]); else defaultStart(mapped);
+            }else{
+              defaultStart(mapped);
+            }
+          }).catch(function(){});
+        });
+      }else{
+        fetch('/api/streams').then(function(r){return r.json()}).then(function(j){
+          var list=Array.isArray(j&&j.streams)?j.streams:[];
+          streams=list;
+          buildCatTabs();
+          renderChannels();
+          var pre=tvgName||title;
+          if(pre && !rawUrl && !current){
+            var p=list.filter(function(x){return (x.tvgName||x.name||'')===pre;});
+            if(p.length>0) startLiveFor(p[0]); else defaultStart(list);
+          }else{
+            defaultStart(list);
+          }
+        }).catch(function(){});
+      }
+    }
+
+    function loadEpgSources(){
+      if(!epgSel) return;
+      epgSel.innerHTML='<option value="">自动</option>';
+      fetch('/api/config/epg-sources').then(function(r){return r.json()}).then(function(j){
+        if(j && j.success && Array.isArray(j.sources)){
+          epgSources=j.sources;
+          j.sources.forEach(function(s){
+            var opt=document.createElement('option');
+            opt.value=s.id;
+            opt.textContent=s.name+(s.scope?('('+s.scope+')'):'');
+            epgSel.appendChild(opt);
+          });
+          if(epgId) epgSel.value=epgId;
+        }
+      }).catch(function(){});
+    }
+
+    if(epgSel){
+      epgSel.onchange=function(){
+        if(current) loadEpgForStream(current); else fetchAndRenderEpg(null);
+      };
+    }
+    if(epgRefresh){
+      epgRefresh.onclick=function(){
+        if(current) fetchAndRenderEpg(current,{force:true}); else fetchAndRenderEpg(null,{force:true});
+      };
+    }
+    // 输入框节流，减少频繁渲染
+    function debounce(fn,wait){
+      var t=null;
+      return function(){
+        var ctx=this,args=arguments;
+        if(t) clearTimeout(t);
+        t=setTimeout(function(){fn.apply(ctx,args)},wait);
+      };
+    }
+    if(searchInput){
+      searchInput.oninput=debounce(renderChannels,200);
+    }
+
+    function applyDirectLiveContext(){
+      if(!rawUrl) return;
+      if(applyDirectLiveContext._done) return;
+      applyDirectLiveContext._done=true;
+      isLive=true;
+      if(liveBadge) liveBadge.classList.remove('d-none');
+      updateLiveBadge();
+      if(titleEl) titleEl.textContent = title || tvgName || 'IPTV 播放';
+      if(subEl) subEl.textContent = tvgName || title || '';
+      showInfo();
+      try{
+        var nm = tvgName || title || '';
+          var sObj = {
+          name: nm,
+          tvgName: nm,
+          tvgId: tvgId || '',
+          logo: (function(){
+            var alt = logoUrlForSized(nm,{h:48,fit:'contain',fmt:'webp'});
+            return logo || alt || '/iptv.png';
+          })()
+        };
+        loadEpgForStream(sObj);
+      }catch(e){}
+    }
+
+    mountQier();
+    (function(){
+      var scheduled=false;
+      function schedule(){
+        if(scheduled) return;
+        scheduled=true;
+        if('requestIdleCallback' in window){
+          requestIdleCallback(function(){nonCriticalInit()},{timeout:1200});
+        }else{
+          setTimeout(function(){nonCriticalInit()},300);
+        }
+      }
+      if(v && !v._initDeferHooked2){
+        v._initDeferHooked2=true;
+        v.addEventListener('playing',function(){nonCriticalInit()},{once:true,passive:true});
+      }
+      if(uiCompact){
+        if(rawUrl){
+          var playUrlInit=resolve(rawUrl);
+          start(playUrlInit);
+          applyDirectLiveContext();
+          schedule();
+        }else{
+          schedule();
+        }
+      }else{
+        if(rawUrl){
+          try{
+            var playUrlInit2=resolve(rawUrl);
+            start(playUrlInit2);
+            applyDirectLiveContext();
+          }catch(e){}
+        }
+        schedule();
+      }
+    })();
+  </script>
 </body>
 </html>
