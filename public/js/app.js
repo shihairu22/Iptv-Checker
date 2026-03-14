@@ -1410,11 +1410,20 @@ async function doChangePwd() {
         });
         const j = await r.json();
         if (j.success) {
-            showCenterConfirm('修改成功，请重新登录', (ok) => {
+            // 关闭弹窗，清空表单
+            const modalEl = document.getElementById('changePwdModal');
+            if (modalEl) {
+                const m = bootstrap.Modal.getInstance(modalEl);
+                if (m) m.hide();
+            }
+            document.getElementById('changePwdForm').reset();
+            // 直接登出，无需用户二次确认
+            showCenterConfirm('密码修改成功，即将重新登录', null, true);
+            setTimeout(() => {
                 fetch('/api/logout', { method: 'POST' }).finally(() => {
-                    window.location.reload();
+                    window.location.href = '/login.html';
                 });
-            }, true);
+            }, 1500);
         } else {
             showCenterConfirm(j.message || '修改失败', null, true);
         }
