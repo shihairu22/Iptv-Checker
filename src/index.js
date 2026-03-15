@@ -5,6 +5,7 @@ const path = require('path');
 const cookieParser = require('cookie-parser');
 const axios = require('axios'); // Add this line
 const streamService = require('./services/streamService');
+const logger = require('./services/logService');
 const { requireAuth } = require('./middleware/auth');
 const authRouter = require('./routes/auth');
 const streamRouter = require('./routes/stream');
@@ -17,12 +18,6 @@ const app = express();
 const port = process.env.PORT || 8848;
 
 // 日志工具 (可进一步迁移到 service)
-const logger = {
-    info: (msg) => console.log(`[${new Date().toLocaleString()}] [INFO] ${msg}`),
-    error: (msg) => console.error(`[${new Date().toLocaleString()}] [ERROR] ${msg}`),
-    warn: (msg) => console.warn(`[${new Date().toLocaleString()}] [WARN] ${msg}`)
-};
-
 // 中间件配置
 app.use(cors({
     origin: '*',
@@ -42,9 +37,9 @@ app.use((req, res, next) => {
         const status = res.statusCode;
         if (!originalUrl.startsWith('/static') && !originalUrl.startsWith('/css') && !originalUrl.startsWith('/js')) {
             let logMsg = `${method} ${originalUrl} ${status} - ${duration}ms - ${ip}`;
-            if (status >= 500) logger.error(logMsg);
-            else if (status >= 400) logger.warn(logMsg);
-            else logger.info(logMsg);
+            if (status >= 500) logger.error(logMsg, 'HTTP');
+            else if (status >= 400) logger.warn(logMsg, 'HTTP');
+            else logger.info(logMsg, 'HTTP');
         }
         originalEnd.apply(res, args);
     };
@@ -60,6 +55,76 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // 初始化数据
+function getCookieValue(cookieHeader, key) {
+    const source = String(cookieHeader || '');
+    const prefix = `${key}=`;
+    return source.split(';')
+        .map(part => part.trim())
+        .find(part => part.startsWith(prefix))
+        ?.slice(prefix.length) || '';
+}
+
+function trimTrailingSlashes(url) {
+    return String(url || '').trim().replace(/\/+$/, '');
+}
+
+function filterStreamsByStatus(streams, status) {
+    if (!status || status === 'all') return streams;
+    const wantOnline = status === 'ok' || status === 'online';
+    return streams.filter(stream => !!stream.isAvailable === wantOnline);
+}
+
+function buildPlaybackUrlForScope(stream, scope, settings) {
+    const rawUrl = String(stream.multicastUrl || '').trim();
+    if (!rawUrl) return '';
+
+    if (/^https?:\/\//i.test(rawUrl)) return rawUrl;
+
+    const baseUrl = scope === 'external'
+        ? trimTrailingSlashes(settings.externalUrl || '')
+        : trimTrailingSlashes(settings.internalUrl || stream.udpxyUrl || '');
+
+    if (!baseUrl) return rawUrl;
+
+    const rtpMatch = rawUrl.match(/^(rtp|udp):?\/+@?(.+)/i);
+    if (rtpMatch) return `${baseUrl}/rtp/${rtpMatch[2]}`;
+
+    const rtspMatch = rawUrl.match(/^rtsps?:\/+@?(.+)/i);
+    if (rtspMatch) return `${baseUrl}/rtsp/${rtspMatch[1]}`;
+
+    return rawUrl;
+}
+
+function buildScopedExport(streams, scope, settings) {
+    return streams.map(stream => ({
+        ...stream,
+        httpUrl: buildPlaybackUrlForScope(stream, scope, settings)
+    }));
+}
+
+function normalizeLogoTemplate(item) {
+    if (typeof item === 'string') {
+        return { id: '', url: item, category: '内网台标' };
+    }
+    return {
+        id: item && item.id ? String(item.id) : '',
+        url: item && item.url ? String(item.url) : '',
+        category: item && item.category ? String(item.category) : '内网台标'
+    };
+}
+
+function pickLogoTemplate(cfg, scope) {
+    const list = Array.isArray(cfg && cfg.templates) ? cfg.templates.map(normalizeLogoTemplate).filter(item => item.url) : [];
+    if (list.length === 0) return null;
+
+    const currentId = typeof cfg.currentId === 'string' ? cfg.currentId : '';
+    const current = list.find(item => item.id === currentId) || null;
+    if (scope === 'external') {
+        return list.find(item => item.category === '外网台标') || current || list[0];
+    }
+    return current || list.find(item => item.category === '内网台标') || list[0];
+}
+
 async function startServer() {
     try {
         await streamService.init();
@@ -81,6 +146,7 @@ async function startServer() {
         // 3. 业务逻辑鉴权中间件
         // 保护所有页面请求及 API 接口
         app.use(['/', '/index.html', '/results', '/results.html', '/player.html', '/logs.html', '/api/*'], requireAuth);
+        app.get('/logs.html', requireAuth, (req, res) => res.sendFile(path.join(publicDir, 'logs.html')));
 
         // 4. 业务 API 路由
         app.use('/api', streamRouter);
@@ -241,6 +307,24 @@ async function startServer() {
         });
 
         // EPG节目表（桩接口，暂不实现EPG解析）
+        app.get('/api/logs/files', (req, res) => {
+            res.json({ success: true, files: logger.listFiles() });
+        });
+
+        app.get('/api/logs/download', (req, res) => {
+            const filePath = logger.getFilePath(req.query.file);
+            if (!filePath) return res.status(404).json({ success: false, message: 'Log file not found' });
+            res.download(filePath, path.basename(filePath));
+        });
+
+        app.get('/api/logs/stream', (req, res) => {
+            logger.stream(res, {
+                level: String(req.query.level || 'info'),
+                module: String(req.query.module || 'all'),
+                keyword: String(req.query.keyword || '').trim()
+            }, req.query.tail);
+        });
+
         app.get('/api/epg/programs', (req, res) => {
             res.json({ success: true, programs: [] });
         });
@@ -251,24 +335,41 @@ async function startServer() {
         });
 
         // 导出 JSON（供播放器加载频道列表）
+        app.get('/api/catchup/play', (req, res) => {
+            res.json({ success: false, message: '鏃剁Щ鍔熻兘鏆傛湭瀹炵幇' });
+        });
+
         app.get('/api/export/json', (req, res) => {
-            const streams = streamService.getAllStreams();
-            res.json({ success: true, streams });
+            const scope = String(req.query.scope || 'internal').trim().toLowerCase() === 'external' ? 'external' : 'internal';
+            const settings = streamService.getSettings();
+            if (scope === 'external' && settings.enableToken) {
+                const token = String(req.query.token || '').trim();
+                if (!token || token !== settings.securityToken) {
+                    return res.status(403).json({ success: false, message: 'Invalid token' });
+                }
+            }
+
+            const status = String(req.query.status || 'all').trim().toLowerCase();
+            const streams = filterStreamsByStatus(streamService.getAllStreams(), status);
+            res.json({ success: true, streams: buildScopedExport(streams, scope, settings) });
         });
 
         // 台标代理（简单透传，不做图像处理）
         app.get('/api/logo', async (req, res) => {
             try {
-                const { URL: NURL } = require('url');
                 const nm = String(req.query.name || '').trim();
+                const scope = String(req.query.scope || 'internal').trim().toLowerCase() === 'external' ? 'external' : 'internal';
                 if (!nm) return res.status(400).send('missing name');
                 const persistence = require('./services/persistenceService');
                 const cfg = await persistence.readJson('logo_templates.json', { templates: [] });
-                const listRaw = Array.isArray(cfg.templates) ? cfg.templates : [];
-                const tpl = (listRaw[0] && (listRaw[0].url || listRaw[0])) || '';
-                if (!tpl) return res.status(404).send('no template');
-                const target = String(tpl).replace('{name}', encodeURIComponent(nm));
-                const resp = await axios.get(target, { responseType: 'arraybuffer', validateStatus: () => true, headers: { 'User-Agent': 'IPTV-Checker/1.0' } });
+                const template = pickLogoTemplate(cfg, scope);
+                if (!template || !template.url) return res.status(404).send('no template');
+                const target = String(template.url).replace('{name}', encodeURIComponent(nm));
+                const resp = await axios.get(target, {
+                    responseType: 'arraybuffer',
+                    validateStatus: () => true,
+                    headers: { 'User-Agent': 'IPTV-Checker/1.0' }
+                });
                 if (resp.status < 200 || resp.status >= 300) return res.status(404).send('not found');
                 const ct = resp.headers['content-type'] || 'image/png';
                 res.set('Cache-Control', 'public, max-age=604800');
@@ -284,7 +385,6 @@ async function startServer() {
         app.get('/', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
         app.get('/results', (req, res) => res.sendFile(path.join(publicDir, 'results.html')));
         app.get('/player.html', (req, res) => res.sendFile(path.join(publicDir, 'player.html')));
-        app.get('/logs.html', (req, res) => res.sendFile(path.join(publicDir, 'logs.html')));
 
         // 全局错误处理
 
@@ -328,6 +428,14 @@ async function startServer() {
             }
         });
         taskManager.setIo(io);
+
+        io.use((socket, next) => {
+            const token = getCookieValue(socket.request.headers.cookie, 'auth_token');
+            if (authRouter.isValidToken(token)) return next();
+            const err = new Error('Unauthorized');
+            err.data = { code: 'UNAUTHORIZED' };
+            return next(err);
+        });
 
         io.on('connection', (socket) => {
             logger.info(`客户端已连接: ${socket.id}`);

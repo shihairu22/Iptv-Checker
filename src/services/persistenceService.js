@@ -258,8 +258,17 @@ class PersistenceService {
     }
 
     // 取下一批待处理条目（status=0）
-    taskQueueFetchBatch(limit) {
-        return this.db.prepare('SELECT id,url,udpxy_url,name FROM task_queue WHERE status=0 ORDER BY id LIMIT ?').all(limit);
+    taskQueueReserveBatch(limit) {
+        return this.db.transaction((size) => {
+            const rows = this.db.prepare(
+                'SELECT id,url,udpxy_url,name FROM task_queue WHERE status=0 ORDER BY id LIMIT ?'
+            ).all(size);
+            if (rows.length === 0) return rows;
+            const ids = rows.map(row => row.id);
+            const placeholders = ids.map(() => '?').join(',');
+            this.db.prepare(`UPDATE task_queue SET status=2 WHERE id IN (${placeholders})`).run(...ids);
+            return rows;
+        })(limit);
     }
 
     // 标记一批条目为已完成
@@ -267,6 +276,16 @@ class PersistenceService {
         if (!ids || ids.length === 0) return;
         const placeholders = ids.map(() => '?').join(',');
         this.db.prepare(`UPDATE task_queue SET status=1 WHERE id IN (${placeholders})`).run(...ids);
+    }
+
+    taskQueueMarkPending(ids) {
+        if (!ids || ids.length === 0) return;
+        const placeholders = ids.map(() => '?').join(',');
+        this.db.prepare(`UPDATE task_queue SET status=0 WHERE id IN (${placeholders})`).run(...ids);
+    }
+
+    taskQueueResetInFlight() {
+        this.db.prepare('UPDATE task_queue SET status=0 WHERE status=2').run();
     }
 
     taskQueueCount() {

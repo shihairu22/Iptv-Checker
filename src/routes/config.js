@@ -312,6 +312,9 @@ router.post('/api/settings/update', async (req, res) => {
         ok = ok && !!ok3;
     }
 
+    const ok4 = await streamService.saveSettings();
+    ok = ok && !!ok4;
+
     if (ok) {
         res.json({ success: true, settings });
     } else {

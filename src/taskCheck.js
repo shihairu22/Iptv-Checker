@@ -82,6 +82,7 @@ class TaskManager extends EventEmitter {
         const saved = persistence.taskMetaGet('meta');
         if (!saved) return;
         if (saved.running || saved.paused) {
+            persistence.taskQueueResetInFlight();
             const pending = persistence.taskQueuePendingCount();
             if (pending === 0) {
                 this.log('检测到残留任务状态但队列已空，自动重置');
@@ -187,7 +188,7 @@ class TaskManager extends EventEmitter {
                 await new Promise(r => setTimeout(r, 200));
                 continue;
             }
-            const batch = persistence.taskQueueFetchBatch(windowSize);
+            const batch = persistence.taskQueueReserveBatch(windowSize);
             if (batch.length === 0) {
                 await new Promise(r => setTimeout(r, 500));
                 const qSize2 = (this.queue.size || 0) + (this.queue.pending || 0);
@@ -207,7 +208,7 @@ class TaskManager extends EventEmitter {
 
     _runItem(item) {
         return new Promise((resolve) => {
-            if (!this.meta.running) { resolve(); return; }
+            if (!this.meta.running) { this._releaseItem(item.id); resolve(); return; }
             let fullUrl = item.url;
             // rtp/udp 组播 及 rtsp 均通过 rtp2httpd/udpxy 转为 HTTP
             const rtpMatch = fullUrl.match(/^rtp:?\/+@?(.+)/i);
@@ -223,9 +224,9 @@ class TaskManager extends EventEmitter {
             const execute = async () => {
                 try {
                     attempts++;
-                    if (!this.meta.running) { resolve(); return; }
+                    if (!this.meta.running) { this._releaseItem(item.id); resolve(); return; }
                     const isAlive = await checkNetwork(fullUrl);
-                    if (!this.meta.running) { resolve(); return; }
+                    if (!this.meta.running) { this._releaseItem(item.id); resolve(); return; }
                     if (!isAlive) {
                         if (attempts < maxAttempts) setTimeout(execute, 1000);
                         else { this.meta.failCount++; this._finalizeItem(item.id); resolve(); }
@@ -233,6 +234,11 @@ class TaskManager extends EventEmitter {
                     }
                     const cp = ffprobeCheck(fullUrl, (data) => {
                         this.activeProcesses.delete(cp);
+                        if (!this.meta.running) {
+                            this._releaseItem(item.id);
+                            resolve();
+                            return;
+                        }
                         if (data.isAvailable) {
                             this._handleResult(item, data);
                             this._finalizeItem(item.id);
@@ -245,6 +251,11 @@ class TaskManager extends EventEmitter {
                     if (cp) this.activeProcesses.add(cp);
                 } catch (e) {
                     console.error('[Task] Error:', e);
+                    if (!this.meta.running) {
+                        this._releaseItem(item.id);
+                        resolve();
+                        return;
+                    }
                     this.meta.failCount++;
                     this._finalizeItem(item.id);
                     resolve();
@@ -259,6 +270,10 @@ class TaskManager extends EventEmitter {
         if (this.meta.paused) return;
         this.meta.finished++;
         if (this.meta.finished % 100 === 0) this._saveMeta();
+    }
+
+    _releaseItem(queueId) {
+        persistence.taskQueueMarkPending([queueId]);
     }
 
     _handleResult(item, data) {
@@ -335,6 +350,7 @@ class TaskManager extends EventEmitter {
         if (this.queue) { this.queue.pause(); }
         this.activeProcesses.forEach(cp => { try { cp.kill(); } catch(e) {} });
         this.activeProcesses.clear();
+        persistence.taskQueueResetInFlight();
         if (!keepThrottle) this._clearThrottleTimer();
         this._saveMeta();
         this.log('任务已暂停');
