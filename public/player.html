@@ -736,16 +736,24 @@
     }
     var __loadingHls=false, __loadingMpegts=false;
     function ensureHls(){
+      var url='/vendor/hls.js/hls.min.js';
       if(window.Hls) return Promise.resolve(true);
-      if(__loadingHls) return (__libLoaders['/vendor/hls.js/hls.min.js']||Promise.resolve(true));
+      if(__loadingHls) return (__libLoaders[url]||Promise.resolve(false));
       __loadingHls=true;
-      return loadScriptOnce('/vendor/hls.js/hls.min.js').catch(function(){});
+      return loadScriptOnce(url).then(function(){return !!window.Hls;}).catch(function(){
+        logStatus('HLS 脚本加载失败: '+url);
+        return false;
+      });
     }
     function ensureMpegts(){
+      var url='/vendor/mpegts.js/mpegts.min.js';
       if(window.mpegts) return Promise.resolve(true);
-      if(__loadingMpegts) return (__libLoaders['/vendor/mpegts.js/mpegts.js']||Promise.resolve(true));
+      if(__loadingMpegts) return (__libLoaders[url]||Promise.resolve(false));
       __loadingMpegts=true;
-      return loadScriptOnce('/vendor/mpegts.js/mpegts.js').catch(function(){});
+      return loadScriptOnce(url).then(function(){return !!window.mpegts;}).catch(function(){
+        logStatus('mpegts 脚本加载失败: '+url);
+        return false;
+      });
     }
 
     function ensureProgressProgramUi(){
@@ -1244,7 +1252,14 @@
       }
       if(isM3u8){
         if(!window.Hls){
-          ensureHls().then(function(){ start(playUrl); });
+          ensureHls().then(function(ok){
+            if(ok && window.Hls){
+              start(playUrl);
+              return;
+            }
+            v.src=playUrl;
+            v.play&&v.play().catch(function(e){logStatus('HLS 脚本缺失，原生播放失败: '+e);});
+          });
           return;
         }
         if(window.Hls&&Hls.isSupported()){
@@ -1333,7 +1348,14 @@
         return;
       }
       if(!window.mpegts){
-        ensureMpegts().then(function(){ start(playUrl); });
+        ensureMpegts().then(function(ok){
+          if(ok && window.mpegts){
+            start(playUrl);
+            return;
+          }
+          v.src=playUrl;
+          v.play&&v.play().catch(function(e){logStatus('mpegts 脚本缺失，直接播放失败: '+e);});
+        });
         return;
       }
       if(!window.mpegts||!mpegts.isSupported()||!mpegts.getFeatureList().mseLivePlayback){
