@@ -8,6 +8,7 @@ const { ffprobeCheck } = require('./ffprobe');
 const { checkNetwork } = require('./networkCheck');
 const persistence = require('./services/persistenceService');
 const streamService = require('./services/streamService');
+const { normalizeMulticastUrl } = require('./utils/streamUrl');
 
 const LOG_SIZE = 50;
 const WINDOW_MULTIPLIER = 4;
@@ -131,7 +132,7 @@ class TaskManager extends EventEmitter {
                 else { urlRaw = parts[0].trim(); }
                 name = name.replace(/^[`'"]+|[`'"]+$/g, '');
                 urlRaw = urlRaw.replace(/^[`'"]+|[`'"]+$/g, '');
-                if (urlRaw) expandBracketRange(urlRaw).forEach(u => items.push({ url: u, udpxyUrl: udpxyUrl || '', name }));
+                if (urlRaw) expandBracketRange(urlRaw).forEach(u => items.push({ url: normalizeMulticastUrl(u), udpxyUrl: udpxyUrl || '', name }));
             });
         } else if (type === 'range') {
             const { udpxyUrl, startUrl, endUrl, ports: portStr } = params;
@@ -159,7 +160,7 @@ class TaskManager extends EventEmitter {
                 for (let ip = Math.min(startInt,endInt); ip <= Math.max(startInt,endInt); ip++) {
                     for (const port of ports) {
                         const ipStr = intToIp(ip);
-                        const url = port ? 'rtp://@' + ipStr + ':' + port : 'rtp://@' + ipStr;
+                        const url = port ? 'rtp://' + ipStr + ':' + port : 'rtp://' + ipStr;
                         items.push({ url, udpxyUrl: udpxyUrl||'', name: '' });
                     }
                 }

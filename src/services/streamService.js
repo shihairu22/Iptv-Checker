@@ -1,4 +1,5 @@
 const persistence = require('./persistenceService');
+const { normalizeMulticastUrl } = require('../utils/streamUrl');
 
 const BACKUP_CONFIG_KEYS = [
     'logo_templates.json',
@@ -107,9 +108,11 @@ class StreamService {
     }
 
     updateStreamByUrl(udpxyUrl, multicastUrl, update) {
-        const row = persistence.db.prepare('SELECT id,data FROM streams WHERE udpxy_url=? AND multicast_url=?').get(udpxyUrl||'', multicastUrl||'');
+        const normalizedMulticastUrl = normalizeMulticastUrl(multicastUrl || '');
+        const row = persistence.db.prepare('SELECT id,data FROM streams WHERE udpxy_url=? AND multicast_url=?').get(udpxyUrl||'', normalizedMulticastUrl||'');
         if (!row) return false;
         const merged = { ...JSON.parse(row.data), ...update };
+        merged.multicastUrl = normalizeMulticastUrl(merged.multicastUrl || normalizedMulticastUrl || '');
         persistence.db.prepare('UPDATE streams SET name=?,data=? WHERE id=?')
             .run(merged.name||'', JSON.stringify(merged), row.id);
         return true;
@@ -130,7 +133,7 @@ class StreamService {
         persistence.db.transaction((list) => {
             for (const incoming of list) {
                 const udpxyUrl = incoming.udpxyUrl || '';
-                const multicastUrl = incoming.multicastUrl || '';
+                const multicastUrl = normalizeMulticastUrl(incoming.multicastUrl || '');
                 const existingRow = select.get(udpxyUrl, multicastUrl);
                 let merged = incoming;
                 if (existingRow) {
@@ -141,6 +144,11 @@ class StreamService {
                         udpxyUrl: udpxyUrl || existing.udpxyUrl || '',
                         multicastUrl: multicastUrl || existing.multicastUrl || '',
                         name: incoming.name || existing.name || ''
+                    };
+                } else {
+                    merged = {
+                        ...incoming,
+                        multicastUrl
                     };
                 }
                 upsert.run(merged.udpxyUrl || '', merged.multicastUrl || '', merged.name || '', JSON.stringify(merged));

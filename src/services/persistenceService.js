@@ -1,6 +1,7 @@
 const fsSync = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
+const { normalizeMulticastUrl } = require('../utils/streamUrl');
 
 const DATA_DIR = path.join(__dirname, '../../data');
 const DB_PATH = path.join(DATA_DIR, 'iptv.db');
@@ -9,6 +10,14 @@ function ensureDataDirSync() {
     if (!fsSync.existsSync(DATA_DIR)) {
         fsSync.mkdirSync(DATA_DIR, { recursive: true });
     }
+}
+
+function normalizeStreamRecord(stream) {
+    const normalized = { ...(stream || {}) };
+    normalized.udpxyUrl = String(normalized.udpxyUrl || '').trim();
+    normalized.multicastUrl = normalizeMulticastUrl(normalized.multicastUrl || '');
+    normalized.name = String(normalized.name || '').trim();
+    return normalized;
 }
 
 class PersistenceService {
@@ -25,6 +34,7 @@ class PersistenceService {
         this.db.pragma('synchronous = NORMAL');
         this._createTables();
         this._migrate();
+        this._normalizeStoredMulticastUrls();
     }
 
     _createTables() {
@@ -80,7 +90,13 @@ class PersistenceService {
                     );
                     this.db.transaction((list) => {
                         for (const s of list) {
-                            insert.run(s.udpxyUrl||'', s.multicastUrl||'', s.name||'', JSON.stringify(s));
+                            const normalized = normalizeStreamRecord(s);
+                            insert.run(
+                                normalized.udpxyUrl || '',
+                                normalized.multicastUrl || '',
+                                normalized.name || '',
+                                JSON.stringify(normalized)
+                            );
                         }
                     })(data.streams);
                     console.log(`[DB] 迁移频道 ${data.streams.length} 条`);
@@ -117,6 +133,45 @@ class PersistenceService {
     }
 
     // ---- kv_store 接口 ----
+
+    _normalizeStoredMulticastUrls() {
+        const streamRows = this.db.prepare(
+            "SELECT id,name,multicast_url,data FROM streams WHERE multicast_url LIKE 'rtp://@%' OR multicast_url LIKE 'udp://@%'"
+        ).all();
+        const queueRows = this.db.prepare(
+            "SELECT id,url FROM task_queue WHERE url LIKE 'rtp://@%' OR url LIKE 'udp://@%'"
+        ).all();
+        if (streamRows.length === 0 && queueRows.length === 0) return;
+
+        const updateStream = this.db.prepare(
+            'UPDATE OR REPLACE streams SET multicast_url=?, name=?, data=? WHERE id=?'
+        );
+        const updateQueue = this.db.prepare('UPDATE task_queue SET url=? WHERE id=?');
+
+        this.db.transaction(() => {
+            for (const row of streamRows) {
+                let data = {};
+                try {
+                    data = JSON.parse(row.data || '{}');
+                } catch (_) {}
+                const normalized = normalizeStreamRecord({
+                    ...data,
+                    multicastUrl: data.multicastUrl || row.multicast_url || '',
+                    name: data.name || row.name || ''
+                });
+                updateStream.run(
+                    normalized.multicastUrl || '',
+                    normalized.name || '',
+                    JSON.stringify(normalized),
+                    row.id
+                );
+            }
+
+            for (const row of queueRows) {
+                updateQueue.run(normalizeMulticastUrl(row.url || ''), row.id);
+            }
+        })();
+    }
 
     validateKey(key) {
         if (!key || typeof key !== 'string') return false;
@@ -159,7 +214,15 @@ class PersistenceService {
         try {
             this.db.transaction((list) => {
                 del.run();
-                for (const s of list) insert.run(s.udpxyUrl||'', s.multicastUrl||'', s.name||'', JSON.stringify(s));
+                for (const s of list) {
+                    const normalized = normalizeStreamRecord(s);
+                    insert.run(
+                        normalized.udpxyUrl || '',
+                        normalized.multicastUrl || '',
+                        normalized.name || '',
+                        JSON.stringify(normalized)
+                    );
+                }
             })(streams);
             return true;
         } catch (e) {
@@ -170,8 +233,14 @@ class PersistenceService {
 
     upsertStream(stream) {
         try {
+            const normalized = normalizeStreamRecord(stream);
             this.db.prepare('INSERT OR REPLACE INTO streams(udpxy_url,multicast_url,name,data) VALUES(?,?,?,?)')
-                .run(stream.udpxyUrl||'', stream.multicastUrl||'', stream.name||'', JSON.stringify(stream));
+                .run(
+                    normalized.udpxyUrl || '',
+                    normalized.multicastUrl || '',
+                    normalized.name || '',
+                    JSON.stringify(normalized)
+                );
             return true;
         } catch (e) {
             console.error('[DB] upsertStream 失败:', e.message);
@@ -252,7 +321,9 @@ class PersistenceService {
         for (let i = 0; i < items.length; i += CHUNK) {
             const chunk = items.slice(i, i + CHUNK);
             this.db.transaction((list) => {
-                for (const item of list) insert.run(item.url, item.udpxyUrl||'', item.name||'');
+                for (const item of list) {
+                    insert.run(normalizeMulticastUrl(item.url), item.udpxyUrl||'', item.name||'');
+                }
             })(chunk);
         }
     }

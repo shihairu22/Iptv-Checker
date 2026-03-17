@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const streamService = require('../services/streamService');
 const { ffprobeCheck } = require('../ffprobe');
+const { normalizeMulticastUrl } = require('../utils/streamUrl');
 
 function cleanText(value, maxLen = 256) {
     if (typeof value !== 'string') return '';
@@ -10,6 +11,10 @@ function cleanText(value, maxLen = 256) {
 
 function cleanUrl(value, maxLen = 2048) {
     return cleanText(value, maxLen);
+}
+
+function cleanMulticastUrl(value, maxLen = 2048) {
+    return normalizeMulticastUrl(cleanText(value, maxLen));
 }
 
 function normalizeUpdateValue(key, value) {
@@ -50,14 +55,14 @@ router.get('/stats', (req, res) => {
 router.post('/check-stream', async (req, res) => {
     let { udpxyUrl, multicastUrl, name } = req.body;
     udpxyUrl = cleanUrl(String(udpxyUrl || ''));
-    multicastUrl = cleanUrl(String(multicastUrl || ''));
+    multicastUrl = cleanMulticastUrl(String(multicastUrl || ''));
     name = cleanText(String(name || ''), 128);
     let fullUrl = multicastUrl;
     // rtp/udp 组播 及 rtsp 均通过 rtp2httpd/udpxy 转为 HTTP
-    const rtpMatch = fullUrl.match(/^rtp:?\/+@?(.+)/i);
+    const rtpMatch = fullUrl.match(/^(rtp|udp):?\/+@?(.+)/i);
     const rtspMatch = fullUrl.match(/^rtsps?:\/+@?(.+)/i);
     if (rtpMatch && udpxyUrl) {
-        fullUrl = `${udpxyUrl}/rtp/${rtpMatch[1]}`;
+        fullUrl = `${udpxyUrl}/${String(rtpMatch[1]).toLowerCase()}/${rtpMatch[2]}`;
     } else if (rtspMatch && udpxyUrl) {
         fullUrl = `${udpxyUrl}/rtsp/${rtspMatch[1]}`;
     }
@@ -128,7 +133,7 @@ router.post('/stream/update', async (req, res) => {
         return res.json({ success: false, message: '缺少 update 参数' });
     }
     const safeUdpxyUrl = cleanUrl(String(udpxyUrl || ''));
-    const safeMulticastUrl = cleanUrl(String(multicastUrl || ''));
+    const safeMulticastUrl = cleanMulticastUrl(String(multicastUrl || ''));
     // 只允许更新安全字段
     const allowed = ['name', 'groupTitle', 'logo', 'tvgId', 'tvgName', 'httpParam', 'catchupBase'];
     const safeUpdate = {};
