@@ -1428,7 +1428,7 @@
           if (isMulticast) {
             const extBaseItem = proxyList.find(x => x.type === '组播代理');
             const base = useExternal ? ((extBaseItem && extBaseItem.url) || eu || s.udpxyUrl || '') : (iu || s.udpxyUrl || '');
-            const path = '/rtp/' + u.replace(/^rtp:\/\//i, '').replace(/^udp:\/\//i, '');
+            const path = (scheme === 'udp' ? '/udp/' : '/rtp/') + u.replace(/^(rtp|udp):\/\/@?/i, '').replace(/^@/, '');
             return base + path;
           } else {
             const proxyItem = proxyList.find(x => x.type === '单播代理');
@@ -1441,7 +1441,8 @@
           }
         } catch (e) {
           const u = String(s.multicastUrl || '').trim();
-          const path = '/rtp/' + u.replace(/^rtp:\/\//i, '').replace(/^udp:\/\//i, '');
+          const scheme = u.split(':')[0].toLowerCase();
+          const path = (scheme === 'udp' ? '/udp/' : '/rtp/') + u.replace(/^(rtp|udp):\/\/@?/i, '').replace(/^@/, '');
           return (s.udpxyUrl || '') + path;
         }
       }
@@ -2474,7 +2475,8 @@
               if (!baseVal && catchEl) catchEl.value = origNoQuery;
             } else if (typeVal === '组播') {
               const u = String(s.multicastUrl || '').trim();
-              const strippedRtp = '/rtp/' + u.replace(/^rtp:\/\//i, '').replace(/^udp:\/\//i, '');
+              const scheme = u.split(':')[0].toLowerCase();
+              const strippedRtp = (scheme === 'udp' ? '/udp/' : '/rtp/') + u.replace(/^(rtp|udp):\/\/@?/i, '').replace(/^@/, '');
               if (useExternal) {
                 // 组播代理：使用“代理设置”中类型为“组播代理”的地址
                 const extBaseItem = proxyList.find(x => x.type === '组播代理');

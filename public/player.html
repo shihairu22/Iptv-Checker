@@ -1128,7 +1128,7 @@
     function isMulticastStream(s){
       var u=String(s.multicastUrl||'').trim();
       var scheme=u.split(':')[0].toLowerCase();
-      return !!s.udpxyUrl||scheme==='rtp'||scheme==='udp'||u.indexOf('/rtp/')>-1;
+      return !!s.udpxyUrl||scheme==='rtp'||scheme==='udp'||u.indexOf('/rtp/')>-1||u.indexOf('/udp/')>-1;
     }
     function isCctvName(nm){ return /^(CCTV|央视)/i.test(String(nm||'')); }
     function isWeiShiName(nm,grp){
@@ -1490,8 +1490,9 @@
       var base=u;
       if(/^(rtp|udp):\/\//i.test(u)&&s.udpxyUrl){
         var udpxy=String(s.udpxyUrl).trim().replace(/\/+$/,'');
-        var addr=u.replace(/^(rtp|udp):\/\//i,'');
-        base=udpxy+'/rtp/'+addr;
+        var scheme=/^udp:\/\//i.test(u)?'udp':'rtp';
+        var addr=u.replace(/^(rtp|udp):\/\/@?/i,'').replace(/^@/,'');
+        base=udpxy+'/'+scheme+'/'+addr;
       }
       var isMc=isMulticastStream(s);
       var raw=base;

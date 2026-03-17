@@ -550,10 +550,10 @@ function renderStreamsList(arr) {
         // rtp/udp 组播 及 rtsp 均通过 rtp2httpd/udpxy 转为 HTTP
         let playUrl;
         const murl = stream.multicastUrl || '';
-        const rtpM = murl.match(/^rtp:?\/+@?(.+)/i);
+        const rtpM = murl.match(/^(rtp|udp):?\/+@?(.+)/i);
         const rtspM = murl.match(/^rtsps?:\/+@?(.+)/i);
         if (rtpM && stream.udpxyUrl) {
-            playUrl = `${stream.udpxyUrl}/rtp/${rtpM[1]}${stream.httpParam ? ('?' + stream.httpParam) : ''}`;
+            playUrl = `${stream.udpxyUrl}/${String(rtpM[1]).toLowerCase()}/${rtpM[2]}${stream.httpParam ? ('?' + stream.httpParam) : ''}`;
         } else if (rtspM && stream.udpxyUrl) {
             playUrl = `${stream.udpxyUrl}/rtsp/${rtspM[1]}${stream.httpParam ? ('?' + stream.httpParam) : ''}`;
         } else {
