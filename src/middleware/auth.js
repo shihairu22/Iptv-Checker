@@ -1,5 +1,17 @@
 const authRouter = require('../routes/auth');
 
+function isPublicExternalApiRequest(req) {
+    const publicApis = new Set([
+        '/api/export/json',
+        '/api/logo',
+        '/api/epg/programs',
+        '/api/catchup/play'
+    ]);
+    if (!publicApis.has(req.path)) return false;
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return false;
+    return String(req.query.scope || '').trim().toLowerCase() === 'external';
+}
+
 function requireAuth(req, res, next) {
     const token = req.cookies['auth_token'];
 
@@ -13,7 +25,7 @@ function requireAuth(req, res, next) {
         }
     }
 
-    if (isValid) {
+    if (isValid || isPublicExternalApiRequest(req)) {
         return next();
     }
 

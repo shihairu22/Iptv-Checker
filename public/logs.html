@@ -120,14 +120,22 @@ let es=null, paused=false, lines=0;
 const box=document.getElementById('logBox');
 const stat=document.getElementById('stat');
 const cnt=document.getElementById('cnt');
+function escapeHtml(text){
+  return String(text||'')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
 function lineHtml(o){
   const lvl=o.level||'INFO';
-  const mod=o.module||'App';
-  const t=o.time||'';
-  const rid=o.reqId?(' '+o.reqId):'';
-  const msg=o.message||'';
-  const data=o.data?(' '+JSON.stringify(o.data)):'';
-  return '<div class="lvl-'+lvl+'"><span class="dim">'+t+'</span> <b>'+lvl+'</b> <span class="dim">'+mod+'</span>'+rid+' '+msg+data+'</div>';
+  const mod=escapeHtml(o.module||'App');
+  const t=escapeHtml(o.time||'');
+  const rid=o.reqId?(' '+escapeHtml(o.reqId)):'';
+  const msg=escapeHtml(o.message||'');
+  const data=o.data?(' '+escapeHtml(JSON.stringify(o.data))):'';
+  return '<div class="lvl-'+escapeHtml(lvl)+'"><span class="dim">'+t+'</span> <b>'+escapeHtml(lvl)+'</b> <span class="dim">'+mod+'</span>'+rid+' '+msg+data+'</div>';
 }
 function scrollBottom(){ if(document.getElementById('autoScroll').checked) box.scrollTop=box.scrollHeight; }
 function append(o){ if(paused) return; box.insertAdjacentHTML('beforeend', lineHtml(o)); lines++; cnt.textContent=lines+' 行'; scrollBottom(); }

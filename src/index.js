@@ -4,6 +4,7 @@ const bodyParser = require('body-parser');
 const path = require('path');
 const cookieParser = require('cookie-parser');
 const axios = require('axios'); // Add this line
+const crypto = require('crypto');
 const streamService = require('./services/streamService');
 const logger = require('./services/logService');
 const { requireAuth } = require('./middleware/auth');
@@ -17,6 +18,7 @@ const { buildProxyPlaybackUrl } = require('./utils/streamUrl');
 
 const app = express();
 const port = process.env.PORT || 8848;
+const PROXY_SIGNING_SECRET = crypto.randomBytes(32).toString('hex');
 
 // 日志工具 (可进一步迁移到 service)
 // 中间件配置
@@ -37,7 +39,8 @@ app.use((req, res, next) => {
         const duration = Date.now() - start;
         const status = res.statusCode;
         if (!originalUrl.startsWith('/static') && !originalUrl.startsWith('/css') && !originalUrl.startsWith('/js')) {
-            let logMsg = `${method} ${originalUrl} ${status} - ${duration}ms - ${ip}`;
+            const safeUrl = redactSensitiveUrlParts(originalUrl);
+            let logMsg = `${method} ${safeUrl} ${status} - ${duration}ms - ${ip}`;
             if (status >= 500) logger.error(logMsg, 'HTTP');
             else if (status >= 400) logger.warn(logMsg, 'HTTP');
             else logger.info(logMsg, 'HTTP');
@@ -69,6 +72,68 @@ function trimTrailingSlashes(url) {
     return String(url || '').trim().replace(/\/+$/, '');
 }
 
+function stripLeadingHttpScheme(url) {
+    return String(url || '').trim().replace(/^https?:\/\//i, '').replace(/^\/+/, '');
+}
+
+function normalizeProxyKind(type) {
+    const text = String(type || '').trim();
+    const lower = text.toLowerCase();
+    if (text === '单播代理' || lower === 'proxy' || lower === 'single' || lower === 'singlecast' || lower === 'unicast') {
+        return 'unicast';
+    }
+    if (text === '组播代理' || lower === 'external' || lower === 'internet' || lower === 'multicast') {
+        return 'multicast';
+    }
+    return '';
+}
+
+function findProxyBase(settings, kind) {
+    const list = Array.isArray(settings && settings.proxyList) ? settings.proxyList : [];
+    const matched = list.find(item => normalizeProxyKind(item && item.type) === kind);
+    return trimTrailingSlashes(matched && matched.url ? matched.url : '');
+}
+
+function buildSingleCastProxyUrl(rawUrl, proxyBase) {
+    const base = trimTrailingSlashes(proxyBase);
+    if (!base) return rawUrl;
+    const stripped = stripLeadingHttpScheme(rawUrl);
+    return stripped ? `${base}/${stripped}` : base;
+}
+
+function redactSensitiveUrlParts(urlValue) {
+    const source = String(urlValue || '');
+    try {
+        const parsed = new URL(source, 'http://local.invalid');
+        ['token', 'securityToken', 'auth_token', 'sig'].forEach((key) => {
+            if (parsed.searchParams.has(key)) {
+                parsed.searchParams.set(key, '[redacted]');
+            }
+        });
+        return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    } catch (_) {
+        return source.replace(/([?&](?:token|securityToken|auth_token|sig)=)[^&#]*/gi, '$1[redacted]');
+    }
+}
+
+function createProxySignature(urlValue) {
+    return crypto
+        .createHmac('sha256', PROXY_SIGNING_SECRET)
+        .update(String(urlValue || ''))
+        .digest('hex');
+}
+
+function hasValidProxySignature(urlValue, signature) {
+    const expected = createProxySignature(urlValue);
+    const provided = String(signature || '').trim();
+    if (!provided || provided.length !== expected.length) return false;
+    try {
+        return crypto.timingSafeEqual(Buffer.from(provided, 'utf8'), Buffer.from(expected, 'utf8'));
+    } catch (_) {
+        return false;
+    }
+}
+
 function filterStreamsByStatus(streams, status) {
     if (!status || status === 'all') return streams;
     const wantOnline = status === 'ok' || status === 'online';
@@ -79,10 +144,15 @@ function buildPlaybackUrlForScope(stream, scope, settings) {
     const rawUrl = String(stream.multicastUrl || '').trim();
     if (!rawUrl) return '';
 
-    if (/^https?:\/\//i.test(rawUrl)) return rawUrl;
+    if (/^https?:\/\//i.test(rawUrl)) {
+        if (scope === 'external') {
+            return buildSingleCastProxyUrl(rawUrl, findProxyBase(settings, 'unicast'));
+        }
+        return rawUrl;
+    }
 
     const baseUrl = scope === 'external'
-        ? trimTrailingSlashes(settings.externalUrl || '')
+        ? trimTrailingSlashes(findProxyBase(settings, 'multicast') || settings.externalUrl || '')
         : trimTrailingSlashes(settings.internalUrl || stream.udpxyUrl || '');
 
     return buildProxyPlaybackUrl(rawUrl, baseUrl);
@@ -188,10 +258,29 @@ async function startServer() {
                 return false;
             }
         }
+
+        function isKnownProxyUrl(urlStr) {
+            const target = String(urlStr || '').trim();
+            if (!target) return false;
+            const streams = streamService.getAllStreams();
+            return streams.some((stream) => {
+                return [
+                    stream && stream.multicastUrl,
+                    stream && stream.logo,
+                    stream && stream.catchupBase
+                ].some((value) => String(value || '').trim() === target);
+            });
+        }
+
+        function isProxyUrlAllowed(urlStr, signature) {
+            if (isUrlSafe(urlStr)) return true;
+            if (!isUrlSafe(urlStr, { allowPrivate: true })) return false;
+            return hasValidProxySignature(urlStr, signature) || isKnownProxyUrl(urlStr);
+        }
         app.get('/api/proxy/stream', async (req, res) => {
             const streamUrl = req.query.url;
             if (!streamUrl) return res.status(400).send('Missing url');
-            if (!isUrlSafe(streamUrl, { allowPrivate: true })) return res.status(403).send('URL not allowed');
+            if (!isProxyUrlAllowed(streamUrl, req.query.sig)) return res.status(403).send('URL not allowed');
             try {
                 const response = await axios({
                     method: 'get',
@@ -211,7 +300,7 @@ async function startServer() {
         app.get('/api/proxy/hls', async (req, res) => {
             const streamUrl = req.query.url;
             if (!streamUrl) return res.status(400).send('Missing url');
-            if (!isUrlSafe(streamUrl, { allowPrivate: true })) return res.status(403).send('URL not allowed');
+            if (!isProxyUrlAllowed(streamUrl, req.query.sig)) return res.status(403).send('URL not allowed');
             try {
                 const response = await axios({
                     method: 'get',
@@ -235,7 +324,8 @@ async function startServer() {
                     const toProxyUrl = (absUrl) => {
                         const isPlaylist = /\.m3u8($|\?)/i.test(absUrl);
                         const endpoint = isPlaylist ? '/api/proxy/hls' : '/api/proxy/stream';
-                        return `${endpoint}?url=${encodeURIComponent(absUrl)}`;
+                        const signature = createProxySignature(absUrl);
+                        return `${endpoint}?url=${encodeURIComponent(absUrl)}&sig=${signature}`;
                     };
 
                     const rewriteUri = (uri) => {
