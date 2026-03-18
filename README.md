@@ -4,7 +4,7 @@
 
 **一个面向 IPTV 组播/单播源管理、检测、导出与播放验证的 Web 工具**
 
-![Iptv-Checker 预览图](./public/preview-empty.png)
+![Iptv-Checker 预览图](./public/preview-main.png)
 
 [![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/shihairu22/Iptv-Checker?style=flat-square&color=blue)](https://github.com/shihairu22/Iptv-Checker/releases)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/shihairu22/Iptv-Checker/docker-image.yml?branch=main&style=flat-square)](https://github.com/shihairu22/Iptv-Checker/actions)
@@ -317,4 +317,3 @@ IPTV_ADMIN_PASSWORD=your-password
 1. 本项目仅用于学习、研究、测试和个人管理场景。
 2. 项目本身不提供任何直播源，也不附带任何可直接商用的媒体内容。
 3. 用户导入、维护、导出和分发的流媒体内容，由用户自行负责合规性。
-
