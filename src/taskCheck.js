@@ -8,7 +8,7 @@ const { ffprobeCheck } = require('./ffprobe');
 const { checkNetwork } = require('./networkCheck');
 const persistence = require('./services/persistenceService');
 const streamService = require('./services/streamService');
-const { normalizeMulticastUrl } = require('./utils/streamUrl');
+const { normalizeMulticastUrl, buildProxyPlaybackUrl } = require('./utils/streamUrl');
 
 const LOG_SIZE = 50;
 const WINDOW_MULTIPLIER = 4;
@@ -210,15 +210,7 @@ class TaskManager extends EventEmitter {
     _runItem(item) {
         return new Promise((resolve) => {
             if (!this.meta.running) { this._releaseItem(item.id); resolve(); return; }
-            let fullUrl = item.url;
-            // rtp/udp 组播 及 rtsp 均通过 rtp2httpd/udpxy 转为 HTTP
-            const rtpMatch = fullUrl.match(/^rtp:?\/+@?(.+)/i);
-            const rtspMatch = fullUrl.match(/^rtsps?:\/+@?(.+)/i);
-            if (rtpMatch && item.udpxyUrl)
-                fullUrl = item.udpxyUrl + '/rtp/' + rtpMatch[1];
-            else if (rtspMatch && item.udpxyUrl)
-                fullUrl = item.udpxyUrl + '/rtsp/' + rtspMatch[1];
-
+            const fullUrl = buildProxyPlaybackUrl(item.url, item.udpxyUrl);
             const maxAttempts = 1 + (parseInt(this.meta.params.retry) || 0);
             let attempts = 0;
 

@@ -13,6 +13,7 @@ const persistRouter = require('./routes/persist');
 const configRouter = require('./routes/config');
 const taskManager = require('./taskCheck');
 const socketIo = require('socket.io');
+const { buildProxyPlaybackUrl } = require('./utils/streamUrl');
 
 const app = express();
 const port = process.env.PORT || 8848;
@@ -84,15 +85,7 @@ function buildPlaybackUrlForScope(stream, scope, settings) {
         ? trimTrailingSlashes(settings.externalUrl || '')
         : trimTrailingSlashes(settings.internalUrl || stream.udpxyUrl || '');
 
-    if (!baseUrl) return rawUrl;
-
-    const rtpMatch = rawUrl.match(/^(rtp|udp):?\/+@?(.+)/i);
-    if (rtpMatch) return `${baseUrl}/rtp/${rtpMatch[2]}`;
-
-    const rtspMatch = rawUrl.match(/^rtsps?:\/+@?(.+)/i);
-    if (rtspMatch) return `${baseUrl}/rtsp/${rtspMatch[1]}`;
-
-    return rawUrl;
+    return buildProxyPlaybackUrl(rawUrl, baseUrl);
 }
 
 function buildScopedExport(streams, scope, settings) {
@@ -127,6 +120,9 @@ function pickLogoTemplate(cfg, scope) {
 
 async function startServer() {
     try {
+        if (typeof authRouter.ready === 'function') {
+            await authRouter.ready();
+        }
         await streamService.init();
         logger.info(`初始化数据加载成功，记录数: ${streamService.getStreamsCount()}`);
 
@@ -259,10 +255,11 @@ async function startServer() {
                     const rewritten = text
                         .split(/\r?\n/)
                         .map((line) => {
-                            const keyMatch = line.match(/^(#EXT-X-KEY:.*URI=")([^"]+)(".*)$/i);
-                            if (keyMatch) {
-                                const replaced = rewriteUri(keyMatch[2]);
-                                return `${keyMatch[1]}${replaced}${keyMatch[3]}`;
+                            const withUriAttrs = line.replace(/URI="([^"]+)"/gi, (_, uriValue) => {
+                                return `URI="${rewriteUri(uriValue)}"`;
+                            });
+                            if (withUriAttrs !== line) {
+                                return withUriAttrs;
                             }
                             if (line.startsWith('#')) return line;
                             return rewriteUri(line);

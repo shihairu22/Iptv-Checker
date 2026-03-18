@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const streamService = require('../services/streamService');
 const { ffprobeCheck } = require('../ffprobe');
-const { normalizeMulticastUrl } = require('../utils/streamUrl');
+const { normalizeMulticastUrl, buildProxyPlaybackUrl } = require('../utils/streamUrl');
 
 function cleanText(value, maxLen = 256) {
     if (typeof value !== 'string') return '';
@@ -57,16 +57,7 @@ router.post('/check-stream', async (req, res) => {
     udpxyUrl = cleanUrl(String(udpxyUrl || ''));
     multicastUrl = cleanMulticastUrl(String(multicastUrl || ''));
     name = cleanText(String(name || ''), 128);
-    let fullUrl = multicastUrl;
-    // rtp/udp 组播 及 rtsp 均通过 rtp2httpd/udpxy 转为 HTTP
-    const rtpMatch = fullUrl.match(/^(rtp|udp):?\/+@?(.+)/i);
-    const rtspMatch = fullUrl.match(/^rtsps?:\/+@?(.+)/i);
-    if (rtpMatch && udpxyUrl) {
-        fullUrl = `${udpxyUrl}/${String(rtpMatch[1]).toLowerCase()}/${rtpMatch[2]}`;
-    } else if (rtspMatch && udpxyUrl) {
-        fullUrl = `${udpxyUrl}/rtsp/${rtspMatch[1]}`;
-    }
-
+    const fullUrl = buildProxyPlaybackUrl(multicastUrl, udpxyUrl);
     // 协议安全校验：仅允许合法的流媒体协议，防止 file:// 等危险协议导致 SSRF
     const allowedProtocols = ['rtp://', 'udp://', 'http://', 'https://', 'rtsp://', 'rtsps://'];
     if (!allowedProtocols.some(p => fullUrl.toLowerCase().startsWith(p))) {

@@ -53,7 +53,10 @@ function deleteSession(token) {
     }
 }
 
-(async () => { await loadSessions(); })();
+const sessionsReady = loadSessions();
+router.ready = async () => {
+    await sessionsReady;
+};
 
 
 // --- 密码安全辅助函数 ---

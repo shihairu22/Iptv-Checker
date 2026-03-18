@@ -20,6 +20,30 @@ function normalizeStreamRecord(stream) {
     return normalized;
 }
 
+function hasMeaningfulValue(value) {
+    if (value === undefined || value === null) return false;
+    if (typeof value === 'string') return value.trim() !== '';
+    if (Array.isArray(value)) return value.length > 0;
+    if (typeof value === 'object') return Object.keys(value).length > 0;
+    return true;
+}
+
+function mergeStreamRecords(preferred, fallback) {
+    const merged = {};
+    const keys = new Set([
+        ...Object.keys(fallback || {}),
+        ...Object.keys(preferred || {})
+    ]);
+
+    for (const key of keys) {
+        const preferredValue = preferred ? preferred[key] : undefined;
+        const fallbackValue = fallback ? fallback[key] : undefined;
+        merged[key] = hasMeaningfulValue(preferredValue) ? preferredValue : fallbackValue;
+    }
+
+    return merged;
+}
+
 class PersistenceService {
     constructor() {
         this.dataDir = DATA_DIR;
@@ -136,16 +160,20 @@ class PersistenceService {
 
     _normalizeStoredMulticastUrls() {
         const streamRows = this.db.prepare(
-            "SELECT id,name,multicast_url,data FROM streams WHERE multicast_url LIKE 'rtp://@%' OR multicast_url LIKE 'udp://@%'"
+            "SELECT id,udpxy_url,name,multicast_url,data FROM streams WHERE multicast_url LIKE 'rtp://@%' OR multicast_url LIKE 'udp://@%'"
         ).all();
         const queueRows = this.db.prepare(
             "SELECT id,url FROM task_queue WHERE url LIKE 'rtp://@%' OR url LIKE 'udp://@%'"
         ).all();
         if (streamRows.length === 0 && queueRows.length === 0) return;
 
-        const updateStream = this.db.prepare(
-            'UPDATE OR REPLACE streams SET multicast_url=?, name=?, data=? WHERE id=?'
+        const findDuplicate = this.db.prepare(
+            'SELECT id,udpxy_url,name,multicast_url,data FROM streams WHERE udpxy_url=? AND multicast_url=? AND id<>? LIMIT 1'
         );
+        const updateStream = this.db.prepare(
+            'UPDATE streams SET udpxy_url=?, multicast_url=?, name=?, data=? WHERE id=?'
+        );
+        const deleteStream = this.db.prepare('DELETE FROM streams WHERE id=?');
         const updateQueue = this.db.prepare('UPDATE task_queue SET url=? WHERE id=?');
 
         this.db.transaction(() => {
@@ -156,15 +184,49 @@ class PersistenceService {
                 } catch (_) {}
                 const normalized = normalizeStreamRecord({
                     ...data,
+                    udpxyUrl: data.udpxyUrl || row.udpxy_url || '',
                     multicastUrl: data.multicastUrl || row.multicast_url || '',
                     name: data.name || row.name || ''
                 });
-                updateStream.run(
+
+                const duplicate = findDuplicate.get(
+                    normalized.udpxyUrl || '',
                     normalized.multicastUrl || '',
-                    normalized.name || '',
-                    JSON.stringify(normalized),
                     row.id
                 );
+
+                if (!duplicate) {
+                    updateStream.run(
+                        normalized.udpxyUrl || '',
+                        normalized.multicastUrl || '',
+                        normalized.name || '',
+                        JSON.stringify(normalized),
+                        row.id
+                    );
+                    continue;
+                }
+
+                let duplicateData = {};
+                try {
+                    duplicateData = JSON.parse(duplicate.data || '{}');
+                } catch (_) {}
+
+                const existingNormalized = normalizeStreamRecord({
+                    ...duplicateData,
+                    udpxyUrl: duplicateData.udpxyUrl || duplicate.udpxy_url || '',
+                    multicastUrl: duplicateData.multicastUrl || duplicate.multicast_url || '',
+                    name: duplicateData.name || duplicate.name || ''
+                });
+                const merged = normalizeStreamRecord(mergeStreamRecords(existingNormalized, normalized));
+
+                updateStream.run(
+                    merged.udpxyUrl || '',
+                    merged.multicastUrl || '',
+                    merged.name || '',
+                    JSON.stringify(merged),
+                    duplicate.id
+                );
+                deleteStream.run(row.id);
             }
 
             for (const row of queueRows) {
