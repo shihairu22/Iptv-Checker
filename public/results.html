@@ -1390,8 +1390,13 @@
       const start = (sizeVal >= total) ? 0 : (resCurrentPage - 1) * sizeVal;
       const end = (sizeVal >= total) ? total : Math.min(start + sizeVal, total);
       const pageData = filtered.slice(start, end);
+      const streamIndexMap = new Map();
+      streams.forEach((item, idx) => {
+        streamIndexMap.set(`${item.udpxyUrl || ''}\n${item.multicastUrl || ''}`, idx);
+      });
       function getStreamIndex(s) {
-        return streams.findIndex(x => x.udpxyUrl === s.udpxyUrl && x.multicastUrl === s.multicastUrl);
+        const key = `${s.udpxyUrl || ''}\n${s.multicastUrl || ''}`;
+        return streamIndexMap.has(key) ? streamIndexMap.get(key) : -1;
       }
       function streamType(s) {
         const u = (s.multicastUrl || '').trim();
@@ -1506,6 +1511,8 @@
         return 'background-color:' + color + ';color:' + tc + ';';
       }
       const html = pageData.map(s => {
+        const streamIndex = getStreamIndex(s);
+        const isSelected = streamIndex >= 0 && selectedRes.has(streamIndex);
         const nameEsc = escapeHTML(s.name || '-');
         const groupEsc = escapeHTML(s.groupTitle || '-');
         const displayAddrEsc = escapeHTML(displayUrlBase(s) || '');
@@ -1514,7 +1521,7 @@
 
         return `
     <tr>
-      <td class="col-select ps-3"><input type="checkbox" class="form-check-input sel-res" data-index="${getStreamIndex(s)}" ${selectedRes.has(getStreamIndex(s)) ? 'checked' : ''}></td>
+      <td class="col-select ps-3"><input type="checkbox" class="form-check-input sel-res" data-index="${streamIndex}" ${isSelected ? 'checked' : ''}></td>
       <td class="col-status">${s.isAvailable ? '<span class="badge bg-success rounded-pill"><i class="bi bi-check-circle me-1"></i>在线</span>' : '<span class="badge bg-danger rounded-pill"><i class="bi bi-x-circle me-1"></i>离线</span>'}</td>
       <td class="col-type"><span class="badge bg-light text-dark border">${streamType(s)}</span></td>
       <td class="col-name" title="${nameEsc}">${nameEsc}</td>

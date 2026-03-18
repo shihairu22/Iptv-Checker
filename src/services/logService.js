@@ -5,7 +5,8 @@ const EventEmitter = require('events');
 const DATA_DIR = path.join(__dirname, '../../data');
 const LOG_DIR = path.join(DATA_DIR, 'logs');
 const LOG_FILE = path.join(LOG_DIR, 'app.log');
-const MAX_RECENT = 500;
+const MAX_TAIL = 2000;
+const MAX_RECENT = MAX_TAIL;
 
 const LEVEL_SCORE = {
     DEBUG: 10,
@@ -82,6 +83,38 @@ class LogService extends EventEmitter {
         super();
         ensureLogDir();
         this.recent = readAllEntries().slice(-MAX_RECENT);
+        this.writer = this.createWriter();
+
+        const closeWriter = () => this.close();
+        process.once('beforeExit', closeWriter);
+        process.once('exit', closeWriter);
+    }
+
+    createWriter() {
+        const writer = fs.createWriteStream(LOG_FILE, { flags: 'a', encoding: 'utf8' });
+        writer.on('error', () => {
+            // Keep in-memory logging alive even if the file sink temporarily fails.
+        });
+        return writer;
+    }
+
+    writeToFile(payload) {
+        if (this.writer && !this.writer.destroyed) {
+            try {
+                this.writer.write(payload + '\n');
+                return;
+            } catch (e) {
+                // Fall through to a best-effort async append.
+            }
+        }
+        fs.promises.appendFile(LOG_FILE, payload + '\n', 'utf8').catch(() => {});
+    }
+
+    close() {
+        if (this.writer && !this.writer.destroyed) {
+            this.writer.end();
+        }
+        this.writer = null;
     }
 
     write(level, message, moduleName = 'App', data, reqId) {
@@ -98,11 +131,7 @@ class LogService extends EventEmitter {
         if (this.recent.length > MAX_RECENT) this.recent.shift();
 
         const payload = JSON.stringify(entry);
-        try {
-            fs.appendFileSync(LOG_FILE, payload + '\n', 'utf8');
-        } catch (e) {
-            // Keep console logging even if file persistence fails.
-        }
+        this.writeToFile(payload);
 
         const line = `[${entry.time}] [${entry.level}] [${entry.module}] ${entry.message}${entry.data === undefined ? '' : ' ' + stringifyData(entry.data)}`;
         if (entry.level === 'ERROR' || entry.level === 'FATAL') console.error(line);
@@ -159,8 +188,9 @@ class LogService extends EventEmitter {
     }
 
     getTail(filters = {}, tail = 200) {
-        const entries = readAllEntries().filter(entry => this.matches(entry, filters));
-        return entries.slice(-Math.max(1, Math.min(parseInt(tail, 10) || 200, 2000)));
+        const size = Math.max(1, Math.min(parseInt(tail, 10) || 200, MAX_TAIL));
+        const entries = this.recent.filter(entry => this.matches(entry, filters));
+        return entries.slice(-size);
     }
 
     stream(res, filters = {}, tail = 200) {
