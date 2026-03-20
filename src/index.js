@@ -3,8 +3,6 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
 const cookieParser = require('cookie-parser');
-const axios = require('axios'); // Add this line
-const crypto = require('crypto');
 const streamService = require('./services/streamService');
 const logger = require('./services/logService');
 const { requireAuth } = require('./middleware/auth');
@@ -12,13 +10,14 @@ const authRouter = require('./routes/auth');
 const streamRouter = require('./routes/stream');
 const persistRouter = require('./routes/persist');
 const configRouter = require('./routes/config');
+const playerRouter = require('./routes/player');
+const logsRouter = require('./routes/logs');
+const proxyRouter = require('./routes/proxy');
 const taskManager = require('./taskCheck');
 const socketIo = require('socket.io');
-const { buildProxyPlaybackUrl } = require('./utils/streamUrl');
 
 const app = express();
 const port = process.env.PORT || 8848;
-const PROXY_SIGNING_SECRET = crypto.randomBytes(32).toString('hex');
 
 // 日志工具 (可进一步迁移到 service)
 // 中间件配置
@@ -68,39 +67,6 @@ function getCookieValue(cookieHeader, key) {
         ?.slice(prefix.length) || '';
 }
 
-function trimTrailingSlashes(url) {
-    return String(url || '').trim().replace(/\/+$/, '');
-}
-
-function stripLeadingHttpScheme(url) {
-    return String(url || '').trim().replace(/^https?:\/\//i, '').replace(/^\/+/, '');
-}
-
-function normalizeProxyKind(type) {
-    const text = String(type || '').trim();
-    const lower = text.toLowerCase();
-    if (text === '单播代理' || lower === 'proxy' || lower === 'single' || lower === 'singlecast' || lower === 'unicast') {
-        return 'unicast';
-    }
-    if (text === '组播代理' || lower === 'external' || lower === 'internet' || lower === 'multicast') {
-        return 'multicast';
-    }
-    return '';
-}
-
-function findProxyBase(settings, kind) {
-    const list = Array.isArray(settings && settings.proxyList) ? settings.proxyList : [];
-    const matched = list.find(item => normalizeProxyKind(item && item.type) === kind);
-    return trimTrailingSlashes(matched && matched.url ? matched.url : '');
-}
-
-function buildSingleCastProxyUrl(rawUrl, proxyBase) {
-    const base = trimTrailingSlashes(proxyBase);
-    if (!base) return rawUrl;
-    const stripped = stripLeadingHttpScheme(rawUrl);
-    return stripped ? `${base}/${stripped}` : base;
-}
-
 function redactSensitiveUrlParts(urlValue) {
     const source = String(urlValue || '');
     try {
@@ -114,78 +80,6 @@ function redactSensitiveUrlParts(urlValue) {
     } catch (_) {
         return source.replace(/([?&](?:token|securityToken|auth_token|sig)=)[^&#]*/gi, '$1[redacted]');
     }
-}
-
-function createProxySignature(urlValue) {
-    return crypto
-        .createHmac('sha256', PROXY_SIGNING_SECRET)
-        .update(String(urlValue || ''))
-        .digest('hex');
-}
-
-function hasValidProxySignature(urlValue, signature) {
-    const expected = createProxySignature(urlValue);
-    const provided = String(signature || '').trim();
-    if (!provided || provided.length !== expected.length) return false;
-    try {
-        return crypto.timingSafeEqual(Buffer.from(provided, 'utf8'), Buffer.from(expected, 'utf8'));
-    } catch (_) {
-        return false;
-    }
-}
-
-function filterStreamsByStatus(streams, status) {
-    if (!status || status === 'all') return streams;
-    const wantOnline = status === 'ok' || status === 'online';
-    return streams.filter(stream => !!stream.isAvailable === wantOnline);
-}
-
-function buildPlaybackUrlForScope(stream, scope, settings) {
-    const rawUrl = String(stream.multicastUrl || '').trim();
-    if (!rawUrl) return '';
-
-    if (/^https?:\/\//i.test(rawUrl)) {
-        if (scope === 'external') {
-            return buildSingleCastProxyUrl(rawUrl, findProxyBase(settings, 'unicast'));
-        }
-        return rawUrl;
-    }
-
-    const baseUrl = scope === 'external'
-        ? trimTrailingSlashes(findProxyBase(settings, 'multicast') || settings.externalUrl || '')
-        : trimTrailingSlashes(settings.internalUrl || stream.udpxyUrl || '');
-
-    return buildProxyPlaybackUrl(rawUrl, baseUrl);
-}
-
-function buildScopedExport(streams, scope, settings) {
-    return streams.map(stream => ({
-        ...stream,
-        httpUrl: buildPlaybackUrlForScope(stream, scope, settings)
-    }));
-}
-
-function normalizeLogoTemplate(item) {
-    if (typeof item === 'string') {
-        return { id: '', url: item, category: '内网台标' };
-    }
-    return {
-        id: item && item.id ? String(item.id) : '',
-        url: item && item.url ? String(item.url) : '',
-        category: item && item.category ? String(item.category) : '内网台标'
-    };
-}
-
-function pickLogoTemplate(cfg, scope) {
-    const list = Array.isArray(cfg && cfg.templates) ? cfg.templates.map(normalizeLogoTemplate).filter(item => item.url) : [];
-    if (list.length === 0) return null;
-
-    const currentId = typeof cfg.currentId === 'string' ? cfg.currentId : '';
-    const current = list.find(item => item.id === currentId) || null;
-    if (scope === 'external') {
-        return list.find(item => item.category === '外网台标') || current || list[0];
-    }
-    return current || list.find(item => item.category === '内网台标') || list[0];
 }
 
 async function startServer() {
@@ -217,6 +111,9 @@ async function startServer() {
         // 4. 业务 API 路由
         app.use('/api', streamRouter);
         app.use('/api/persist', persistRouter);
+        app.use('/api', playerRouter);
+        app.use('/api', proxyRouter);
+        app.use('/api/logs', logsRouter);
         app.get('/api/system/info', (req, res) => res.json({ success: true, version: require('../package.json').version }));
         app.post('/api/system/update', (req, res) => {
             res.status(501).json({
@@ -225,245 +122,11 @@ async function startServer() {
             });
         });
 
-        // 5. 流媒体代理模块 (GET 请求，不受 CSRF 影响)
-        // URL 安全校验：仅允许 http/https，屏蔽本地回环和链路本地地址
-        function isPrivateIp(host) {
-            // IPv4 loopback and link-local
-            if (host === 'localhost' || host === '127.0.0.1') return true;
-            if (host.startsWith('169.254.')) return true;
-            // Private IPv4 ranges: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
-            const parts = host.split('.').map(Number);
-            if (parts.length === 4 && parts.every(n => !isNaN(n) && n >= 0 && n <= 255)) {
-                if (parts[0] === 10) return true;
-                if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
-                if (parts[0] === 192 && parts[1] === 168) return true;
-                if (parts[0] === 0) return true;
-            }
-            // IPv6 loopback, link-local (fe80::/10), unique-local (fc00::/7)
-            if (host === '::1') return true;
-            const lowerHost = host.replace(/^\[|\]$/g, '').toLowerCase();
-            if (lowerHost.startsWith('fe80:') || lowerHost.startsWith('fc') || lowerHost.startsWith('fd')) return true;
-            return false;
-        }
-
-        function isUrlSafe(urlStr, options = {}) {
-            const { allowPrivate = false } = options;
-            try {
-                const u = new URL(urlStr);
-                if (!['http:', 'https:'].includes(u.protocol)) return false;
-                const host = u.hostname;
-                if (!allowPrivate && isPrivateIp(host)) return false;
-                return true;
-            } catch (e) {
-                return false;
-            }
-        }
-
-        function isKnownProxyUrl(urlStr) {
-            const target = String(urlStr || '').trim();
-            if (!target) return false;
-            const streams = streamService.getAllStreams();
-            return streams.some((stream) => {
-                return [
-                    stream && stream.multicastUrl,
-                    stream && stream.logo,
-                    stream && stream.catchupBase
-                ].some((value) => String(value || '').trim() === target);
-            });
-        }
-
-        function isProxyUrlAllowed(urlStr, signature) {
-            if (isUrlSafe(urlStr)) return true;
-            if (!isUrlSafe(urlStr, { allowPrivate: true })) return false;
-            return hasValidProxySignature(urlStr, signature) || isKnownProxyUrl(urlStr);
-        }
-        app.get('/api/proxy/stream', async (req, res) => {
-            const streamUrl = req.query.url;
-            if (!streamUrl) return res.status(400).send('Missing url');
-            if (!isProxyUrlAllowed(streamUrl, req.query.sig)) return res.status(403).send('URL not allowed');
-            try {
-                const response = await axios({
-                    method: 'get',
-                    url: streamUrl,
-                    responseType: 'stream',
-                    timeout: 10000,
-                    headers: { 'User-Agent': 'IPTV-Checker/1.0' }
-                });
-                res.setHeader('Content-Type', 'video/mp2t');
-                response.data.pipe(res);
-                res.on('close', () => { if (response.data.destroy) response.data.destroy(); });
-            } catch (e) {
-                res.status(502).send('Proxy error');
-            }
-        });
-
-        app.get('/api/proxy/hls', async (req, res) => {
-            const streamUrl = req.query.url;
-            if (!streamUrl) return res.status(400).send('Missing url');
-            if (!isProxyUrlAllowed(streamUrl, req.query.sig)) return res.status(403).send('URL not allowed');
-            try {
-                const response = await axios({
-                    method: 'get',
-                    url: streamUrl,
-                    responseType: 'arraybuffer',
-                    timeout: 10000,
-                    headers: {
-                        'User-Agent': 'IPTV-Checker/1.0',
-                        ...(req.headers.range ? { Range: req.headers.range } : {})
-                    },
-                    validateStatus: (s) => s >= 200 && s < 400
-                });
-
-                const upstreamType = String(response.headers['content-type'] || '').toLowerCase();
-                const isM3u8 = streamUrl.includes('.m3u8') || upstreamType.includes('mpegurl') || upstreamType.includes('vnd.apple.mpegurl');
-
-                if (isM3u8) {
-                    const text = Buffer.from(response.data).toString('utf8');
-                    const baseUrl = new URL(streamUrl);
-
-                    const toProxyUrl = (absUrl) => {
-                        const isPlaylist = /\.m3u8($|\?)/i.test(absUrl);
-                        const endpoint = isPlaylist ? '/api/proxy/hls' : '/api/proxy/stream';
-                        const signature = createProxySignature(absUrl);
-                        return `${endpoint}?url=${encodeURIComponent(absUrl)}&sig=${signature}`;
-                    };
-
-                    const rewriteUri = (uri) => {
-                        const trimmed = uri.trim();
-                        if (!trimmed || trimmed.startsWith('#')) return uri;
-                        if (/^(data:|blob:|javascript:)/i.test(trimmed)) return uri;
-                        let absolute;
-                        try {
-                            absolute = new URL(trimmed, baseUrl).toString();
-                        } catch (_) {
-                            return uri;
-                        }
-                        if (!isUrlSafe(absolute, { allowPrivate: true })) return uri;
-                        return toProxyUrl(absolute);
-                    };
-
-                    const rewritten = text
-                        .split(/\r?\n/)
-                        .map((line) => {
-                            const withUriAttrs = line.replace(/URI="([^"]+)"/gi, (_, uriValue) => {
-                                return `URI="${rewriteUri(uriValue)}"`;
-                            });
-                            if (withUriAttrs !== line) {
-                                return withUriAttrs;
-                            }
-                            if (line.startsWith('#')) return line;
-                            return rewriteUri(line);
-                        })
-                        .join('\n');
-
-                    res.status(response.status);
-                    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
-                    res.send(rewritten);
-                    return;
-                }
-
-                res.status(response.status);
-                if (response.headers['content-type']) res.setHeader('Content-Type', response.headers['content-type']);
-                if (response.headers['content-length']) res.setHeader('Content-Length', response.headers['content-length']);
-                if (response.headers['accept-ranges']) res.setHeader('Accept-Ranges', response.headers['accept-ranges']);
-                res.end(Buffer.from(response.data));
-            } catch (e) {
-                res.status(502).send('Proxy error');
-            }
-        });
-
         // 6. 任务管理路由
         app.get('/api/task/status', (req, res) => res.json(taskManager.getStatus()));
         app.post('/api/task/start', (req, res) => res.json({ success: taskManager.start(req.body) }));
         app.post('/api/task/stop', (req, res) => { taskManager.stop(); res.json({ success: true }); });
         app.post('/api/task/resume', (req, res) => res.json({ success: taskManager.resume() }));
-
-        // 6b. 播放器相关接口
-        app.post('/api/player/log', (req, res) => {
-            try {
-                const b = req.body || {};
-                const name = String(b.name || b.tvgName || '').trim();
-                const mode = String(b.mode || '').trim();
-                const cast = String(b.cast || '').trim();
-                const programTitle = String(b.programTitle || '').trim();
-                const url = String(b.url || '').trim();
-                const info = [name ? `频道: ${name}` : '', mode ? `类型: ${mode}` : '', cast ? `/${cast}` : '', programTitle ? `节目: ${programTitle}` : '', url ? `地址: ${url}` : ''].filter(Boolean).join(' | ');
-                if (info) logger.info(`播放日志 -> ${info}`);
-                res.json({ success: true });
-            } catch (e) { res.json({ success: false }); }
-        });
-
-        // EPG节目表（桩接口，暂不实现EPG解析）
-        app.get('/api/logs/files', (req, res) => {
-            res.json({ success: true, files: logger.listFiles() });
-        });
-
-        app.get('/api/logs/download', (req, res) => {
-            const filePath = logger.getFilePath(req.query.file);
-            if (!filePath) return res.status(404).json({ success: false, message: 'Log file not found' });
-            res.download(filePath, path.basename(filePath));
-        });
-
-        app.get('/api/logs/stream', (req, res) => {
-            logger.stream(res, {
-                level: String(req.query.level || 'info'),
-                module: String(req.query.module || 'all'),
-                keyword: String(req.query.keyword || '').trim()
-            }, req.query.tail);
-        });
-
-        app.get('/api/epg/programs', (req, res) => {
-            res.json({ success: true, programs: [] });
-        });
-
-        // 时移回看（桩接口）
-        app.post('/api/catchup/play', (req, res) => {
-            res.json({ success: false, message: '时移功能暂未实现' });
-        });
-
-        // 导出 JSON（供播放器加载频道列表）
-        app.get('/api/catchup/play', (req, res) => {
-            res.json({ success: false, message: '鏃剁Щ鍔熻兘鏆傛湭瀹炵幇' });
-        });
-
-        app.get('/api/export/json', (req, res) => {
-            const scope = String(req.query.scope || 'internal').trim().toLowerCase() === 'external' ? 'external' : 'internal';
-            const settings = streamService.getSettings();
-            if (scope === 'external' && settings.enableToken) {
-                const token = String(req.query.token || '').trim();
-                if (!token || token !== settings.securityToken) {
-                    return res.status(403).json({ success: false, message: 'Invalid token' });
-                }
-            }
-
-            const status = String(req.query.status || 'all').trim().toLowerCase();
-            const streams = filterStreamsByStatus(streamService.getAllStreams(), status);
-            res.json({ success: true, streams: buildScopedExport(streams, scope, settings) });
-        });
-
-        // 台标代理（简单透传，不做图像处理）
-        app.get('/api/logo', async (req, res) => {
-            try {
-                const nm = String(req.query.name || '').trim();
-                const scope = String(req.query.scope || 'internal').trim().toLowerCase() === 'external' ? 'external' : 'internal';
-                if (!nm) return res.status(400).send('missing name');
-                const persistence = require('./services/persistenceService');
-                const cfg = await persistence.readJson('logo_templates.json', { templates: [] });
-                const template = pickLogoTemplate(cfg, scope);
-                if (!template || !template.url) return res.status(404).send('no template');
-                const target = String(template.url).replace('{name}', encodeURIComponent(nm));
-                const resp = await axios.get(target, {
-                    responseType: 'arraybuffer',
-                    validateStatus: () => true,
-                    headers: { 'User-Agent': 'IPTV-Checker/1.0' }
-                });
-                if (resp.status < 200 || resp.status >= 300) return res.status(404).send('not found');
-                const ct = resp.headers['content-type'] || 'image/png';
-                res.set('Cache-Control', 'public, max-age=604800');
-                res.type(ct);
-                res.send(Buffer.from(resp.data));
-            } catch (e) { res.status(404).send('not found'); }
-        });
 
         // 7. 配置相关路由
         app.use('/', configRouter);
@@ -475,30 +138,6 @@ async function startServer() {
 
         // 全局错误处理
 
-        // 9. 远程文件抓取（前端"从网络加载 m3u/txt"功能）
-        app.post('/api/fetch-text', async (req, res) => {
-            const { urls } = req.body;
-            if (!Array.isArray(urls) || urls.length === 0) {
-                return res.status(400).json({ success: false, message: 'Missing urls' });
-            }
-            const limited = urls.slice(0, 10);
-            const results = await Promise.allSettled(limited.map(async (url) => {
-                if (typeof url !== 'string' || (!url.startsWith('http://') && !url.startsWith('https://'))) {
-                    return { url, ok: false, error: 'Invalid URL' };
-                }
-                // SSRF 防护：禁止请求本地回环和链路本地地址
-                if (!isUrlSafe(url)) {
-                    return { url, ok: false, error: 'URL not allowed' };
-                }
-                try {
-                    const resp = await axios.get(url, { timeout: 15000, responseType: 'text', maxContentLength: 5 * 1024 * 1024 });
-                    return { url, ok: true, text: resp.data };
-                } catch (e) {
-                    return { url, ok: false, error: 'Fetch failed' };
-                }
-            }));
-            res.json({ success: true, results: results.map(r => r.value || r.reason) });
-        });
         app.use((err, req, res, next) => {
             logger.error(`系统错误: ${err.stack}`);
             res.status(500).json({ success: false, message: '服务器内部错误' });
