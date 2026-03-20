@@ -172,4 +172,17 @@ router.get('/logo', async (req, res) => {
     }
 });
 
+router._internal = {
+    trimTrailingSlashes,
+    stripLeadingHttpScheme,
+    normalizeProxyKind,
+    findProxyBase,
+    buildSingleCastProxyUrl,
+    filterStreamsByStatus,
+    buildPlaybackUrlForScope,
+    buildScopedExport,
+    normalizeLogoTemplate,
+    pickLogoTemplate
+};
+
 module.exports = router;

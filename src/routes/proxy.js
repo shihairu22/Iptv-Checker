@@ -73,6 +73,42 @@ function isProxyUrlAllowed(urlStr, signature) {
     return hasValidProxySignature(urlStr, signature) || isKnownProxyUrl(urlStr);
 }
 
+function buildSignedProxyUrl(absUrl) {
+    const isPlaylist = /\.m3u8($|\?)/i.test(absUrl);
+    const endpoint = isPlaylist ? '/api/proxy/hls' : '/api/proxy/stream';
+    const signature = createProxySignature(absUrl);
+    return `${endpoint}?url=${encodeURIComponent(absUrl)}&sig=${signature}`;
+}
+
+function rewriteHlsPlaylist(text, streamUrl) {
+    const baseUrl = new URL(streamUrl);
+
+    const rewriteUri = (uri) => {
+        const trimmed = uri.trim();
+        if (!trimmed || trimmed.startsWith('#')) return uri;
+        if (/^(data:|blob:|javascript:)/i.test(trimmed)) return uri;
+
+        let absolute;
+        try {
+            absolute = new URL(trimmed, baseUrl).toString();
+        } catch (_) {
+            return uri;
+        }
+        if (!isUrlSafe(absolute, { allowPrivate: true })) return uri;
+        return buildSignedProxyUrl(absolute);
+    };
+
+    return String(text || '')
+        .split(/\r?\n/)
+        .map((line) => {
+            const withUriAttrs = line.replace(/URI="([^"]+)"/gi, (_, uriValue) => `URI="${rewriteUri(uriValue)}"`);
+            if (withUriAttrs !== line) return withUriAttrs;
+            if (line.startsWith('#')) return line;
+            return rewriteUri(line);
+        })
+        .join('\n');
+}
+
 router.get('/proxy/stream', async (req, res) => {
     const streamUrl = req.query.url;
     if (!streamUrl) return res.status(400).send('Missing url');
@@ -119,39 +155,7 @@ router.get('/proxy/hls', async (req, res) => {
 
         if (isM3u8) {
             const text = Buffer.from(response.data).toString('utf8');
-            const baseUrl = new URL(streamUrl);
-
-            const toProxyUrl = (absUrl) => {
-                const isPlaylist = /\.m3u8($|\?)/i.test(absUrl);
-                const endpoint = isPlaylist ? '/api/proxy/hls' : '/api/proxy/stream';
-                const signature = createProxySignature(absUrl);
-                return `${endpoint}?url=${encodeURIComponent(absUrl)}&sig=${signature}`;
-            };
-
-            const rewriteUri = (uri) => {
-                const trimmed = uri.trim();
-                if (!trimmed || trimmed.startsWith('#')) return uri;
-                if (/^(data:|blob:|javascript:)/i.test(trimmed)) return uri;
-
-                let absolute;
-                try {
-                    absolute = new URL(trimmed, baseUrl).toString();
-                } catch (_) {
-                    return uri;
-                }
-                if (!isUrlSafe(absolute, { allowPrivate: true })) return uri;
-                return toProxyUrl(absolute);
-            };
-
-            const rewritten = text
-                .split(/\r?\n/)
-                .map((line) => {
-                    const withUriAttrs = line.replace(/URI="([^"]+)"/gi, (_, uriValue) => `URI="${rewriteUri(uriValue)}"`);
-                    if (withUriAttrs !== line) return withUriAttrs;
-                    if (line.startsWith('#')) return line;
-                    return rewriteUri(line);
-                })
-                .join('\n');
+            const rewritten = rewriteHlsPlaylist(text, streamUrl);
 
             res.status(response.status);
             res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -193,5 +197,15 @@ router.post('/fetch-text', async (req, res) => {
 
     res.json({ success: true, results: results.map(result => result.value || result.reason) });
 });
+
+router._internal = {
+    isPrivateIp,
+    isUrlSafe,
+    createProxySignature,
+    hasValidProxySignature,
+    isProxyUrlAllowed,
+    buildSignedProxyUrl,
+    rewriteHlsPlaylist
+};
 
 module.exports = router;
