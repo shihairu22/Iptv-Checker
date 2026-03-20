@@ -2682,6 +2682,8 @@
       }
       async function __initResults() {
         if (window.__resultsInitDone) return;
+        if (window.__resultsInitPromise) return window.__resultsInitPromise;
+        window.__resultsInitPromise = (async () => {
         try {
           const logoTplInputEl = document.getElementById('logoTplInput');
           if (logoTplInputEl) logoTplInputEl.value = getLogoTemplate();
@@ -2957,6 +2959,7 @@
         } finally {
           dbg('__initResults done');
           window.__resultsInitDone = true;
+          window.__resultsInitPromise = null;
           await fetchStreams();
           try {
             const r1 = await fetch('/api/streams'); dbg('diag:/api/streams status', { ok: r1.ok, status: r1.status });
@@ -2968,10 +2971,15 @@
             const r3 = await fetch('/api/settings'); dbg('diag:/api/settings status', { ok: r3.ok, status: r3.status });
           } catch (e) { dbg('diag:/api/settings error', { message: String(e) }); }
         }
+        })();
+        return window.__resultsInitPromise;
       }
-      fetchStreams();
       requestAnimationFrame(() => { try { __initResults(); } catch (e) { } });
-      window.addEventListener('DOMContentLoaded', () => { __initResults(); });
+      if (document.readyState === 'loading') {
+        window.addEventListener('DOMContentLoaded', () => { __initResults(); }, { once: true });
+      } else {
+        __initResults();
+      }
       setTimeout(() => { if (!window.__resultsInitDone) { __initResults(); } }, 800);
     </script>
     <!-- 修改密码弹窗 -->

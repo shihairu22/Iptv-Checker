@@ -1,5 +1,6 @@
 const express = require('express');
 const axios = require('axios');
+const authRouter = require('./auth');
 const persistence = require('../services/persistenceService');
 const streamService = require('../services/streamService');
 const logger = require('../services/logService');
@@ -46,6 +47,19 @@ function filterStreamsByStatus(streams, status) {
     return streams.filter(stream => !!stream.isAvailable === wantOnline);
 }
 
+function normalizeScope(scope) {
+    return String(scope || 'internal').trim().toLowerCase() === 'external' ? 'external' : 'internal';
+}
+
+function hasValidExternalToken(req, settings) {
+    if (normalizeScope(req.query.scope) !== 'external') return true;
+    const authToken = req.cookies && req.cookies.auth_token;
+    if (authRouter.isValidToken(authToken)) return true;
+    if (!settings.enableToken) return true;
+    const token = String(req.query.token || '').trim();
+    return !!token && token === settings.securityToken;
+}
+
 function buildPlaybackUrlForScope(stream, scope, settings) {
     const rawUrl = String(stream.multicastUrl || '').trim();
     if (!rawUrl) return '';
@@ -83,15 +97,17 @@ function normalizeLogoTemplate(item) {
 }
 
 function pickLogoTemplate(cfg, scope) {
-    const list = Array.isArray(cfg && cfg.templates) ? cfg.templates.map(normalizeLogoTemplate).filter(item => item.url) : [];
+    const list = Array.isArray(cfg && cfg.templates)
+        ? cfg.templates.map(normalizeLogoTemplate).filter(item => item.url)
+        : [];
     if (list.length === 0) return null;
 
     const currentId = typeof cfg.currentId === 'string' ? cfg.currentId : '';
     const current = list.find(item => item.id === currentId) || null;
-    if (scope === 'external') {
-        return list.find(item => item.category === '外网台标') || current || list[0];
-    }
-    return current || list.find(item => item.category === '内网台标') || list[0];
+    const scopeMatch = scope === 'external'
+        ? list.find(item => item.category === '外网台标')
+        : list.find(item => item.category === '内网台标');
+    return scopeMatch || current || list[0];
 }
 
 router.post('/player/log', (req, res) => {
@@ -117,25 +133,31 @@ router.post('/player/log', (req, res) => {
 });
 
 router.get('/epg/programs', (req, res) => {
+    if (!hasValidExternalToken(req, streamService.getSettings())) {
+        return res.status(403).json({ success: false, message: 'Invalid token' });
+    }
     res.json({ success: true, programs: [] });
 });
 
 router.post('/catchup/play', (req, res) => {
+    if (!hasValidExternalToken(req, streamService.getSettings())) {
+        return res.status(403).json({ success: false, message: 'Invalid token' });
+    }
     res.json({ success: false, message: '时移功能暂未实现' });
 });
 
 router.get('/catchup/play', (req, res) => {
+    if (!hasValidExternalToken(req, streamService.getSettings())) {
+        return res.status(403).json({ success: false, message: 'Invalid token' });
+    }
     res.json({ success: false, message: '时移功能暂未实现' });
 });
 
 router.get('/export/json', (req, res) => {
-    const scope = String(req.query.scope || 'internal').trim().toLowerCase() === 'external' ? 'external' : 'internal';
+    const scope = normalizeScope(req.query.scope);
     const settings = streamService.getSettings();
-    if (scope === 'external' && settings.enableToken) {
-        const token = String(req.query.token || '').trim();
-        if (!token || token !== settings.securityToken) {
-            return res.status(403).json({ success: false, message: 'Invalid token' });
-        }
+    if (!hasValidExternalToken(req, settings)) {
+        return res.status(403).json({ success: false, message: 'Invalid token' });
     }
 
     const status = String(req.query.status || 'all').trim().toLowerCase();
@@ -146,7 +168,10 @@ router.get('/export/json', (req, res) => {
 router.get('/logo', async (req, res) => {
     try {
         const name = String(req.query.name || '').trim();
-        const scope = String(req.query.scope || 'internal').trim().toLowerCase() === 'external' ? 'external' : 'internal';
+        const scope = normalizeScope(req.query.scope);
+        if (!hasValidExternalToken(req, streamService.getSettings())) {
+            return res.status(403).send('forbidden');
+        }
         if (!name) return res.status(400).send('missing name');
 
         const cfg = await persistence.readJson('logo_templates.json', { templates: [] });
@@ -179,6 +204,8 @@ router._internal = {
     findProxyBase,
     buildSingleCastProxyUrl,
     filterStreamsByStatus,
+    normalizeScope,
+    hasValidExternalToken,
     buildPlaybackUrlForScope,
     buildScopedExport,
     normalizeLogoTemplate,

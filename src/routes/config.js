@@ -128,51 +128,52 @@ function normalizeEpgSourceForWrite(item) {
     };
 }
 
-function applyAppSettingsPatch(payload) {
+function buildPatchedAppSettings(source, payload) {
     const { useInternal, useExternal, internalUrl, externalUrl, securityToken, enableToken } = payload || {};
+    const next = { ...source };
     let changed = false;
 
     if (typeof useInternal === 'boolean') {
-        settings.useInternal = useInternal;
+        next.useInternal = useInternal;
         changed = true;
     }
     if (typeof useExternal === 'boolean') {
-        settings.useExternal = useExternal;
+        next.useExternal = useExternal;
         changed = true;
     }
     if (typeof internalUrl === 'string') {
-        settings.internalUrl = cleanUrl(internalUrl);
+        next.internalUrl = cleanUrl(internalUrl);
         changed = true;
     }
     if (typeof externalUrl === 'string') {
-        settings.externalUrl = cleanUrl(externalUrl);
+        next.externalUrl = cleanUrl(externalUrl);
         changed = true;
     }
     if (typeof securityToken === 'string') {
-        settings.securityToken = cleanText(securityToken, 256);
+        next.securityToken = cleanText(securityToken, 256);
         changed = true;
     }
     if (typeof enableToken === 'boolean') {
-        settings.enableToken = enableToken;
+        next.enableToken = enableToken;
         changed = true;
     }
 
-    return changed;
+    return { changed, next };
 }
 
-function getCurrentAppSettingsPayload() {
+function getCurrentAppSettingsPayload(source = settings) {
     return {
-        useInternal: settings.useInternal,
-        useExternal: settings.useExternal,
-        internalUrl: settings.internalUrl,
-        externalUrl: settings.externalUrl,
-        securityToken: settings.securityToken,
-        enableToken: settings.enableToken
+        useInternal: source.useInternal,
+        useExternal: source.useExternal,
+        internalUrl: source.internalUrl,
+        externalUrl: source.externalUrl,
+        securityToken: source.securityToken,
+        enableToken: source.enableToken
     };
 }
 
-async function saveCurrentAppSettings() {
-    return await writeJson(CFG_APPSET, getCurrentAppSettingsPayload());
+async function saveCurrentAppSettings(source = settings) {
+    return await writeJson(CFG_APPSET, getCurrentAppSettingsPayload(source));
 }
 // streamService.init() 现已改用 Object.assign，保持对象引用不变，直接使用即可
 const settings = streamService.settings;
@@ -286,36 +287,37 @@ router.get('/api/settings', (req, res) => {
 });
 router.post('/api/settings/update', async (req, res) => {
     const { fccServers, logoTemplate, groupTitles, globalFcc: gf, externalUrl, internalUrl, useInternal, useExternal, securityToken, enableToken, proxyList } = req.body || {};
-    if (Array.isArray(fccServers)) settings.fccServers = fccServers;
-    if (typeof logoTemplate === 'string') settings.logoTemplate = cleanUrl(logoTemplate);
-    if (Array.isArray(groupTitles)) settings.groupTitles = groupTitles;
-    const appSettingsChanged = applyAppSettingsPatch({ externalUrl, internalUrl, useInternal, useExternal, securityToken, enableToken });
+    const nextSettings = { ...settings };
+    if (Array.isArray(fccServers)) nextSettings.fccServers = fccServers;
+    if (typeof logoTemplate === 'string') nextSettings.logoTemplate = cleanUrl(logoTemplate);
+    if (Array.isArray(groupTitles)) nextSettings.groupTitles = groupTitles;
+    if (typeof gf === 'string') nextSettings.globalFcc = cleanText(gf, 256);
+    const appPatch = buildPatchedAppSettings(nextSettings, { externalUrl, internalUrl, useInternal, useExternal, securityToken, enableToken });
+    Object.assign(nextSettings, appPatch.next);
 
     let ok = true;
-    if (appSettingsChanged) {
-        ok = await saveCurrentAppSettings();
+    if (appPatch.changed) {
+        ok = await saveCurrentAppSettings(nextSettings);
     }
 
     if (Array.isArray(proxyList)) {
-        settings.proxyList = normalizeProxyList(proxyList);
-        const ok2 = await writeJson(CFG_PROXY, { list: settings.proxyList });
+        const nextProxyList = normalizeProxyList(proxyList);
+        const ok2 = await writeJson(CFG_PROXY, { list: nextProxyList });
         ok = ok && ok2;
+        if (ok2) nextSettings.proxyList = nextProxyList;
     }
 
+    const ok4 = await persistence.writeJson('settings', nextSettings);
+    ok = ok && !!ok4;
+
     if (typeof gf === 'string') {
-        settings.globalFcc = cleanText(gf, 256);
-        const gfValue = settings.globalFcc;
+        const gfValue = nextSettings.globalFcc;
         const val = gfValue.includes('=') ? gfValue : `fcc=${gfValue}`;
         // 纯 SQL 更新，不加载全量数据到内存
         streamService.setFccForMulticast(val);
-        const ok3 = await streamService.save();
-        ok = ok && !!ok3;
     }
-
-    const ok4 = await streamService.saveSettings();
-    ok = ok && !!ok4;
-
     if (ok) {
+        Object.assign(settings, nextSettings);
         res.json({ success: true, settings });
     } else {
         res.status(500).json({ success: false, message: '部分配置保存失败' });
@@ -355,7 +357,7 @@ router.get('/api/config/proxies', async (req, res) => {
 router.post('/api/config/proxies', async (req, res) => {
     const { list } = req.body || {};
     const arr = normalizeProxyList(list);
-    if (await writeJson(CFG_PROXY, { list: arr })) {
+    if (await writeJson(CFG_PROXY, { list: arr }) && await persistence.writeJson('settings', { ...settings, proxyList: arr })) {
         settings.proxyList = arr;
         res.json({ success: true });
     } else {
@@ -368,8 +370,9 @@ router.get('/api/config/app-settings', async (req, res) => {
     res.json({ success: true, appSettings: cfg });
 });
 router.post('/api/config/app-settings', async (req, res) => {
-    applyAppSettingsPatch(req.body || {});
-    if (await saveCurrentAppSettings()) {
+    const appPatch = buildPatchedAppSettings(settings, req.body || {});
+    if (await saveCurrentAppSettings(appPatch.next) && await persistence.writeJson('settings', appPatch.next)) {
+        Object.assign(settings, appPatch.next);
         res.json({ success: true });
     } else {
         res.status(500).json({ success: false, message: '保存配置失败' });

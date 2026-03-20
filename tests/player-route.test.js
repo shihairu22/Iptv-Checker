@@ -6,7 +6,9 @@ const {
     buildPlaybackUrlForScope,
     buildScopedExport,
     pickLogoTemplate,
-    filterStreamsByStatus
+    filterStreamsByStatus,
+    normalizeScope,
+    hasValidExternalToken
 } = playerRouter._internal;
 
 test('buildPlaybackUrlForScope uses singlecast proxy for external http streams', () => {
@@ -38,7 +40,7 @@ test('buildScopedExport attaches httpUrl to each stream', () => {
     assert.equal(exported[0].httpUrl, 'http://127.0.0.1:4022/rtp/239.0.0.1:1234');
 });
 
-test('pickLogoTemplate prefers scope-matching template and current fallback', () => {
+test('pickLogoTemplate prefers scope-matching template before current fallback', () => {
     const cfg = {
         currentId: 'b',
         templates: [
@@ -47,7 +49,7 @@ test('pickLogoTemplate prefers scope-matching template and current fallback', ()
         ]
     };
     assert.equal(pickLogoTemplate(cfg, 'external').id, 'b');
-    assert.equal(pickLogoTemplate(cfg, 'internal').id, 'b');
+    assert.equal(pickLogoTemplate(cfg, 'internal').id, 'a');
 });
 
 test('filterStreamsByStatus keeps only requested availability', () => {
@@ -57,4 +59,18 @@ test('filterStreamsByStatus keeps only requested availability', () => {
     ];
     assert.deepEqual(filterStreamsByStatus(list, 'online').map(item => item.id), [1]);
     assert.deepEqual(filterStreamsByStatus(list, 'offline').map(item => item.id), [2]);
+});
+
+test('normalizeScope only accepts external explicitly', () => {
+    assert.equal(normalizeScope('external'), 'external');
+    assert.equal(normalizeScope('EXTERNAL'), 'external');
+    assert.equal(normalizeScope('internal'), 'internal');
+    assert.equal(normalizeScope('anything-else'), 'internal');
+});
+
+test('hasValidExternalToken only enforces token in external mode', () => {
+    const settings = { enableToken: true, securityToken: 'secret' };
+    assert.equal(hasValidExternalToken({ query: { scope: 'internal' } }, settings), true);
+    assert.equal(hasValidExternalToken({ query: { scope: 'external', token: 'secret' } }, settings), true);
+    assert.equal(hasValidExternalToken({ query: { scope: 'external', token: 'bad' } }, settings), false);
 });

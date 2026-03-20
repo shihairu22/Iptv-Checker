@@ -1,4 +1,14 @@
 const authRouter = require('../routes/auth');
+const streamService = require('../services/streamService');
+
+function hasValidExternalToken(req) {
+    const settings = streamService.getSettings();
+    if (!settings.enableToken) return true;
+
+    const expected = String(settings.securityToken || '').trim();
+    const provided = String(req.query.token || '').trim();
+    return !!expected && !!provided && provided === expected;
+}
 
 function isPublicExternalApiRequest(req) {
     const publicApis = new Set([
@@ -9,7 +19,8 @@ function isPublicExternalApiRequest(req) {
     ]);
     if (!publicApis.has(req.path)) return false;
     if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return false;
-    return String(req.query.scope || '').trim().toLowerCase() === 'external';
+    if (String(req.query.scope || '').trim().toLowerCase() !== 'external') return false;
+    return hasValidExternalToken(req);
 }
 
 function requireAuth(req, res, next) {

@@ -2156,7 +2156,11 @@
       var nm=String(name||'').trim();
       if(!nm) return '';
       var scope=isExternalHost()?'external':getScope();
-      return '/api/logo?name='+encodeURIComponent(nm)+'&scope='+scope;
+      var qs='name='+encodeURIComponent(nm)+'&scope='+scope;
+      if(scope==='external' && settingsCache && settingsCache.enableToken && settingsCache.securityToken){
+        qs+='&token='+encodeURIComponent(settingsCache.securityToken);
+      }
+      return '/api/logo?'+qs;
     }
 
     function loadStreams(){

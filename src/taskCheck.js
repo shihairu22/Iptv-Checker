@@ -13,20 +13,38 @@ const { normalizeMulticastUrl, buildProxyPlaybackUrl } = require('./utils/stream
 const LOG_SIZE = 50;
 const WINDOW_MULTIPLIER = 4;
 
-let PQueue;
-(async () => {
+class FallbackQueue {
+    constructor(opts) {
+        this.concurrency = (opts && opts.concurrency) || 1;
+        this.size = 0;
+        this.pending = 0;
+    }
+    add(fn) {
+        this.size++;
+        return Promise.resolve()
+            .then(() => {
+                this.size = Math.max(0, this.size - 1);
+                this.pending++;
+                return fn();
+            })
+            .finally(() => {
+                this.pending = Math.max(0, this.pending - 1);
+            });
+    }
+    pause() {}
+    clear() { this.size = 0; }
+    start() {}
+}
+
+let PQueue = FallbackQueue;
+const pQueueReady = (async () => {
     try {
         const importPromise = import('p-queue');
         const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('PQueue import timeout')), 10000));
         const m = await Promise.race([importPromise, timeoutPromise]);
-        PQueue = m.default;
+        if (m && m.default) PQueue = m.default;
     } catch (e) {
         console.error('Failed to import p-queue:', e);
-        PQueue = class MockQueue {
-            constructor(opts) { this.concurrency = (opts && opts.concurrency) || 1; this.size = 0; this.pending = 0; }
-            add(fn) { return Promise.resolve().then(fn); }
-            pause() {} clear() {} start() {}
-        };
     }
 })();
 
@@ -54,14 +72,15 @@ class TaskManager extends EventEmitter {
         this._throttlePhase = '';
         this._throttleStartAt = 0;
         this._throttleDurationMs = 0;
+        this._queueStartRequested = false;
 
-        this.init().catch(err => console.error('Task init failed:', err));
+        this.ready = this.init().catch(err => console.error('Task init failed:', err));
     }
 
     setIo(io) { this.io = io; }
 
     async init() {
-        while (!PQueue) await new Promise(r => setTimeout(r, 100));
+        await pQueueReady.catch(() => {});
         await this._loadMeta();
         setInterval(() => this.flushResults(), 3000);
     }
@@ -136,12 +155,15 @@ class TaskManager extends EventEmitter {
             });
         } else if (type === 'range') {
             const { udpxyUrl, startUrl, endUrl, ports: portStr } = params;
-            const parseRtp = (url) => {
-                let u = (url || '').trim().replace(/^(rtp|udp):?\/+@?/i, '').replace(/^@/, '');
+            const parseEndpoint = (url) => {
+                const raw = String(url || '').trim();
+                const schemeMatch = raw.match(/^(rtp|udp):/i);
+                const scheme = schemeMatch ? String(schemeMatch[1]).toLowerCase() : 'rtp';
+                let u = raw.replace(/^(rtp|udp):?\/+@?/i, '').replace(/^@/, '');
                 const match = u.match(/^([^:]+)(?::(\d+))?$/);
                 if (!match) return null;
                 if (!match[1].match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) return null;
-                return { host: match[1], port: match[2] ? parseInt(match[2], 10) : 0 };
+                return { host: match[1], port: match[2] ? parseInt(match[2], 10) : 0, scheme };
             };
             const ipToInt = ip => ip.split('.').map(Number).reduce((acc, n) => ((acc << 8) | n) >>> 0, 0);
             const intToIp = v => [(v>>>24)&255,(v>>>16)&255,(v>>>8)&255,v&255].join('.');
@@ -153,14 +175,15 @@ class TaskManager extends EventEmitter {
                 });
                 return [...new Set(ports)];
             };
-            const s = parseRtp(startUrl), e = parseRtp(endUrl);
+            const s = parseEndpoint(startUrl), e = parseEndpoint(endUrl);
             if (s && e) {
+                const scheme = s.scheme || e.scheme || 'rtp';
                 const ports = parsePorts(portStr).length ? parsePorts(portStr) : [s.port || e.port || 0];
                 const startInt = ipToInt(s.host), endInt = ipToInt(e.host);
                 for (let ip = Math.min(startInt,endInt); ip <= Math.max(startInt,endInt); ip++) {
                     for (const port of ports) {
                         const ipStr = intToIp(ip);
-                        const url = port ? 'rtp://' + ipStr + ':' + port : 'rtp://' + ipStr;
+                        const url = port ? `${scheme}://${ipStr}:${port}` : `${scheme}://${ipStr}`;
                         items.push({ url, udpxyUrl: udpxyUrl||'', name: '' });
                     }
                 }
@@ -174,8 +197,23 @@ class TaskManager extends EventEmitter {
     _startQueue() {
         if (this.queue) { this.queue.pause(); this.queue.clear(); }
         this.queue = new PQueue({ concurrency: this.meta.params.concurrency || 20, autoStart: true });
+        this._queueStartRequested = false;
         this._driving = false;
         this._driveLoop();
+    }
+
+    _startQueueWhenReady() {
+        if (this._queueStartRequested) return;
+        this._queueStartRequested = true;
+        Promise.resolve(this.ready)
+            .then(() => {
+                this._queueStartRequested = false;
+                if (this.meta.running) this._startQueue();
+            })
+            .catch((err) => {
+                this._queueStartRequested = false;
+                console.error('Task queue bootstrap failed:', err);
+            });
     }
 
     async _driveLoop() {
@@ -326,7 +364,7 @@ class TaskManager extends EventEmitter {
         this.meta.paused = false;
         this._saveMeta();
         this.log('任务启动，共 ' + total + ' 条，并发 ' + this.meta.params.concurrency);
-        this._startQueue();
+        this._startQueueWhenReady();
 
         const throttle = params.throttle;
         if (throttle && throttle.enabled && throttle.runMinutes > 0) {
@@ -368,7 +406,7 @@ class TaskManager extends EventEmitter {
         this.meta.paused = false;
         this._saveMeta();
         this.log('任务恢复');
-        this._startQueue();
+        this._startQueueWhenReady();
         return true;
     }
 
