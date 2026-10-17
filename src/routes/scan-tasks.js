@@ -73,4 +73,16 @@ route('post', '/scan-tasks/resume', async (req, res) => {
     return apiSuccess(res, status);
 });
 
+route('get', '/scan-tasks/failures', async (req, res) => {
+    const list = await getRunner().failures(req.query.limit);
+    return apiSuccess(res, { failures: list, total: list.length });
+});
+
+route('post', '/scan-tasks/retry-failed', async (req, res) => {
+    const result = await getRunner().retryFailed();
+    if (!result.started) return apiFail(res, result.reason || '未重扫', 409, { status: result.status });
+    req.log.info(`扫描任务重扫失败项：${result.retried} 项`);
+    return apiSuccess(res, result);
+});
+
 module.exports = router;

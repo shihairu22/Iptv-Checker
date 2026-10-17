@@ -1,4 +1,4 @@
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 const logger = require('../core/logger');
 const config = require('../config');
 const storage = require('../storage');
@@ -39,9 +39,17 @@ class StreamService {
         }
         this.inFlight.set(fullUrl, [callback]);
 
-        // 使用json格式输出，便于解析
-        const cmd = `ffprobe -v quiet -print_format json -select_streams v:0 -show_streams -show_programs -show_format "${fullUrl}"`;
-        exec(cmd, { timeout: 8000 }, (error, stdout, stderr) => {
+        // 用 execFile 传参数组，不经 shell —— 地址里出现引号/$() 也不会被解释
+        const args = [
+            '-v', 'quiet',
+            '-print_format', 'json',
+            '-select_streams', 'v:0',
+            '-show_streams',
+            '-show_programs',
+            '-show_format',
+            fullUrl
+        ];
+        execFile('ffprobe', args, { timeout: 8000 }, (error, stdout, stderr) => {
             let isAvailable = false;
             let frameRate = null;
             let bitRate = null;

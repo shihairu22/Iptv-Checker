@@ -348,7 +348,14 @@ route('post', '/system/update', async (req, res) => {
     });
     
     const targetTag = String((req.body && req.body.targetTag) || '').trim();
-    const remoteUrl = 'https://github.com/cgg888/channel-sentinel.git';
+    // 更新源：默认指向本仓库（含扫描队列等本地改动），可用 UPDATE_REPO_URL 覆盖。
+    // 注意：这里不要写死上游地址，否则一键更新会把 fork 的 origin 改回上游并强制切档，本地改动全丢。
+    const remoteUrl = String(process.env.UPDATE_REPO_URL || 'https://github.com/shihairu22/Iptv-Checker.git').trim();
+    const repoSlug = (u) => {
+        const m = String(u || '').toLowerCase().replace(/\.git$/, '').match(/([^/:]+)\/([^/]+)$/);
+        return m ? m[1] + '/' + m[2] : '';
+    };
+    const remoteSlug = repoSlug(remoteUrl);
     
     try {
         await run('git --version');
@@ -370,7 +377,7 @@ route('post', '/system/update', async (req, res) => {
         
         if (!cur) {
             await run(`git remote add origin ${remoteUrl}`);
-        } else if (cur.indexOf('cgg888/channel-sentinel') === -1) {
+        } else if (repoSlug(cur) !== remoteSlug) {
             await run(`git remote set-url origin ${remoteUrl}`);
         }
         

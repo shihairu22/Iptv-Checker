@@ -219,6 +219,9 @@ class ScanRunner extends EventEmitter {
                     if (this.meta.running) this._startThrottleIfNeeded();
                     this._resumeDrive();
                 }
+            } else if (saved) {
+                // 上次任务已结束：只恢复展示信息（日志/参数），不自动开跑
+                this.meta = { ...this.meta, ...saved, running: false, paused: false, logs: [] };
             }
         })().catch((err) => {
             this._ready = null;
@@ -366,6 +369,46 @@ class ScanRunner extends EventEmitter {
         return this.getStatus();
     }
 
+    /** 失败明细（供页面展示） */
+    async failures(limit) {
+        const { queue } = this._deps();
+        return queue.listFailed(limit);
+    }
+
+    /**
+     * 把失败项打回待处理并重新开跑。
+     * 任务已结束时 meta 已被清空，这里按队列现状重建计数，避免成功/失败数错位。
+     */
+    async retryFailed() {
+        await this.init();
+        const { queue } = this._deps();
+        if (this.meta.running) {
+            return { started: false, reason: '任务进行中，先停止再重扫失败项', status: await this.getStatus() };
+        }
+        const n = await queue.resetFailed();
+        if (!n) {
+            return { started: false, reason: '没有失败项', status: await this.getStatus() };
+        }
+        const counts = await queue.counts();
+        this.meta = {
+            ...this.meta,
+            running: true,
+            paused: false,
+            total: counts.total,
+            finished: counts.done,
+            success: counts.done,
+            failed: 0,
+            startedAt: Date.now(),
+            logs: []
+        };
+        this._buffer = [];
+        this._inflight = 0;
+        this.log(`重扫失败项：${n} 项已回到待处理`);
+        this._startThrottleIfNeeded();
+        this._resumeDrive();
+        return { started: true, retried: n, status: await this.getStatus() };
+    }
+
     async _drive() {
         if (this._driving) return;
         this._driving = true;
@@ -416,7 +459,9 @@ class ScanRunner extends EventEmitter {
         const fullUrl = buildPlaybackUrl(row.url, row.udpxyUrl || this.meta.udpxyUrl);
         const maxAttempts = 1 + (this.meta.retry || 0);
         let lastError = '';
+        let used = 0;
         for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+            used = attempt;
             if (!this.meta.running) {
                 await queue.release([row.id]);
                 return;
@@ -429,7 +474,7 @@ class ScanRunner extends EventEmitter {
                 }
                 if (probeResult && probeResult.isAvailable) {
                     await this.sink({ row, probeResult, meta: this.meta, fullUrl });
-                    await queue.markDone([row.id]);
+                    await queue.markDone([row.id], used);
                     this.meta.success += 1;
                     this.meta.finished += 1;
                     this._afterItem();
@@ -445,7 +490,7 @@ class ScanRunner extends EventEmitter {
             await queue.release([row.id]);
             return;
         }
-        await queue.markFailed([row.id], lastError);
+        await queue.markFailed([row.id], lastError, used || maxAttempts);
         this.meta.failed += 1;
         this.meta.finished += 1;
         this._afterItem();
@@ -488,8 +533,9 @@ class ScanRunner extends EventEmitter {
             progress: {
                 total: counts.total,
                 finished: counts.done + counts.failed,
-                success: this.meta.success,
-                failed: this.meta.failed,
+                // 以队列表为准：只有成功的项会标 done，所以 done == 成功
+                success: counts.done,
+                failed: counts.failed,
                 pending: counts.pending,
                 inFlight: counts.inFlight
             },

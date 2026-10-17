@@ -91,27 +91,42 @@ function createScanQueue(driver) {
         }));
     }
 
-    async function markDone(ids) {
+    /**
+     * @param {Array} ids
+     * @param {number} [attempts] 实际探测次数（含重试）；不传则保留 reserve 时的计数
+     */
+    async function markDone(ids, attempts) {
         await ensureSchema();
         const list = (Array.isArray(ids) ? ids : [ids]).filter((v) => v != null);
         if (list.length === 0) return;
         const now = new Date().toISOString();
+        const n = Number(attempts);
+        const setAttempts = Number.isFinite(n) && n > 0;
         await run(
-            `UPDATE ${TABLE} SET state = 'done', error = NULL, updated_at = ?
+            `UPDATE ${TABLE} SET state = 'done', error = NULL, updated_at = ?${setAttempts ? ', attempts = ?' : ''}
              WHERE id IN (${list.map(() => '?').join(',')})`,
-            [now, ...list.map(Number)]
+            setAttempts ? [now, n, ...list.map(Number)] : [now, ...list.map(Number)]
         );
     }
 
-    async function markFailed(ids, error) {
+    /**
+     * @param {Array} ids
+     * @param {string} error
+     * @param {number} [attempts] 实际探测次数（含重试）
+     */
+    async function markFailed(ids, error, attempts) {
         await ensureSchema();
         const list = (Array.isArray(ids) ? ids : [ids]).filter((v) => v != null);
         if (list.length === 0) return;
         const now = new Date().toISOString();
+        const n = Number(attempts);
+        const setAttempts = Number.isFinite(n) && n > 0;
         await run(
-            `UPDATE ${TABLE} SET state = 'failed', error = ?, updated_at = ?
+            `UPDATE ${TABLE} SET state = 'failed', error = ?, updated_at = ?${setAttempts ? ', attempts = ?' : ''}
              WHERE id IN (${list.map(() => '?').join(',')})`,
-            [String(error || '').slice(0, 500), now, ...list.map(Number)]
+            setAttempts
+                ? [String(error || '').slice(0, 500), now, n, ...list.map(Number)]
+                : [String(error || '').slice(0, 500), now, ...list.map(Number)]
         );
     }
 
@@ -132,6 +147,34 @@ function createScanQueue(driver) {
     async function resetInFlight() {
         await ensureSchema();
         await run(`UPDATE ${TABLE} SET state = 'pending' WHERE state = 'in_flight'`);
+    }
+
+    /** 把失败项打回 pending 重扫，返回受影响条数 */
+    async function resetFailed() {
+        await ensureSchema();
+        const row = await get(`SELECT COUNT(*) AS c FROM ${TABLE} WHERE state = 'failed'`);
+        const n = (row && Number(row.c)) || 0;
+        if (!n) return 0;
+        await run(`UPDATE ${TABLE} SET state = 'pending', error = NULL, updated_at = ? WHERE state = 'failed'`, [new Date().toISOString()]);
+        return n;
+    }
+
+    /** 失败明细（按需截断） */
+    async function listFailed(limit) {
+        await ensureSchema();
+        const n = Math.max(1, Math.min(parseInt(limit, 10) || 20, 500));
+        const rows = await all(
+            `SELECT url, udpxy_url, attempts, error, updated_at FROM ${TABLE}
+             WHERE state = 'failed' ORDER BY updated_at DESC LIMIT ?`,
+            [n]
+        );
+        return (rows || []).map((r) => ({
+            url: r.url,
+            udpxyUrl: r.udpxy_url || '',
+            attempts: r.attempts || 0,
+            error: r.error || '',
+            updatedAt: r.updated_at
+        }));
     }
 
     async function counts() {
@@ -183,6 +226,8 @@ function createScanQueue(driver) {
         markFailed,
         release,
         resetInFlight,
+        resetFailed,
+        listFailed,
         counts,
         saveMeta,
         loadMeta,

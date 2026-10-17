@@ -224,6 +224,10 @@ app.get('/results', (req, res) => {
     res.sendFile(path.join(__dirname, '../public/results.html'));
 });
 
+app.get('/scan', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/scan.html'));
+});
+
 // 全局错误处理
 app.use((err, req, res, next) => {
     const domain = (req && req.domain) || 'App';
