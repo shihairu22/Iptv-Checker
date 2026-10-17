@@ -14,6 +14,7 @@ const ALL_STREAM_FIELDS = [
 class StreamService {
     constructor() {
         this.streamCache = new Map();
+        this.inFlight = new Map(); // fullUrl -> [callback]，合并同一 URL 的并发探测
         this.CACHE_DURATION = 5 * 60 * 1000; // 5分钟缓存
     }
 
@@ -29,6 +30,14 @@ class StreamService {
         if (cached && (now - cached.timestamp) < this.CACHE_DURATION) {
             return callback(cached.data);
         }
+
+        // 同一 URL 的并发探测合并成一次 ffprobe（批量扫描时避免重复起进程）
+        const waiting = this.inFlight.get(fullUrl);
+        if (waiting) {
+            waiting.push(callback);
+            return;
+        }
+        this.inFlight.set(fullUrl, [callback]);
 
         // 使用json格式输出，便于解析
         const cmd = `ffprobe -v quiet -print_format json -select_streams v:0 -show_streams -show_programs -show_format "${fullUrl}"`;
@@ -92,8 +101,21 @@ class StreamService {
             };
             // 缓存
             this.streamCache.set(fullUrl, { data: result, timestamp: Date.now() });
-            callback(result);
+            this._settleProbe(fullUrl, result);
         });
+    }
+
+    /** 把一次探测结果分发给所有等待者（并发合并用） */
+    _settleProbe(fullUrl, result) {
+        const waiters = this.inFlight.get(fullUrl) || [];
+        this.inFlight.delete(fullUrl);
+        for (const waiter of waiters) {
+            try {
+                waiter(result);
+            } catch (err) {
+                // 单个回调异常不影响其他等待者
+            }
+        }
     }
 
     ffprobeCheckAsync(fullUrl) {

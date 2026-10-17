@@ -30,7 +30,7 @@ route('post', '/login', async (req, res) => {
     req.log.info(`登录请求: username=${String(username || '')}`);
     const result = await authManager.login(username, password, captchaId, captcha);
     if (result.success) {
-        res.cookie('auth_token', result.token, { maxAge: 3650 * 24 * 60 * 60 * 1000, httpOnly: true });
+        res.cookie('auth_token', result.token, { maxAge: 3650 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'lax', path: '/' });
         return apiSuccess(res, {});
     }
     req.log.warn(`登录失败: username=${String(username || '')}`);
