@@ -1,0 +1,122 @@
+/* 扫描队列页 —— 与全站 tokens 对齐，克制蓝灰，不引入新色系 */
+.scan-wrap { padding-bottom: 40px; }
+
+.scan-title {
+  color: #5b6b8c;
+  font-weight: 700;
+  letter-spacing: .5px;
+}
+:root[data-theme="dark"] .scan-title { color: #9fb0cc; }
+
+.scan-state {
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+.scan-state[data-state="running"] { background: #e8f0fb; color: #2f5d94; border-color: #c9dcf4; }
+.scan-state[data-state="paused"]  { background: #fdf3e3; color: #8a6420; border-color: #f0dcb6; }
+.scan-state[data-state="done"]    { background: #eef1f6; color: #45566f; border-color: #dbe1ea; }
+.scan-state[data-state="stopped"] { background: #f2f3f5; color: #6b7280; border-color: #e2e4e8; }
+:root[data-theme="dark"] .scan-state[data-state="running"] { background: #16263b; color: #9dc2ec; border-color: #23405f; }
+:root[data-theme="dark"] .scan-state[data-state="paused"]  { background: #33280f; color: #dfb877; border-color: #4a3a16; }
+:root[data-theme="dark"] .scan-state[data-state="done"]    { background: #14291d; color: #96c9a9; border-color: #23412f; }
+
+.scan-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+}
+.scan-card-head {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: .86rem;
+  font-weight: 600;
+  color: var(--foreground);
+  padding: .5rem .85rem;
+}
+
+.addr-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .82rem;
+}
+
+/* 进度 */
+.scan-percent { font-size: 1.5rem; font-weight: 700; color: #45608c; letter-spacing: .5px; }
+:root[data-theme="dark"] .scan-percent { color: #9fb8dd; }
+
+.scan-progress { height: 8px; border-radius: 6px; background: var(--muted); }
+.scan-progress .progress-bar {
+  background: linear-gradient(90deg, #6d8cba, #4d6f9e);
+  transition: width .35s ease;
+}
+
+.scan-stat {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: .45rem .3rem;
+  background: var(--surface);
+}
+.scan-stat .v { font-size: 1.05rem; font-weight: 700; line-height: 1.2; color: var(--foreground); }
+.scan-stat .k { font-size: .72rem; color: var(--muted-foreground); }
+.scan-stat.ok .v { color: #2f6b45; }
+.scan-stat.bad .v { color: #b23c3c; }
+:root[data-theme="dark"] .scan-stat.ok .v { color: #86c39b; }
+:root[data-theme="dark"] .scan-stat.bad .v { color: #e08a8a; }
+
+/* 日志 */
+.scan-log {
+  height: 260px;
+  overflow: auto;
+  padding: .6rem .85rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .76rem;
+  line-height: 1.55;
+  color: #4b5563;
+  background: transparent;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+:root[data-theme="dark"] .scan-log { color: #a8b3c4; }
+
+/* 失败明细 */
+.scan-fail-wrap { max-height: 320px; overflow: auto; }
+.scan-fail-table { font-size: .8rem; }
+.scan-fail-table thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--surface);
+  color: var(--muted-foreground);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.scan-ellipsis {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 暗色下 Bootstrap 的辅助文字仍是浅底配色，单独压回 token 色 */
+:root[data-theme="dark"] .scan-wrap .form-text,
+:root[data-theme="dark"] .scan-wrap .text-secondary,
+:root[data-theme="dark"] .scan-wrap .small.text-secondary {
+  color: var(--muted-foreground) !important;
+}
+:root[data-theme="dark"] .scan-wrap .form-control,
+:root[data-theme="dark"] .scan-wrap .form-select {
+  background-color: var(--secondary);
+  border-color: var(--input);
+  color: var(--foreground);
+}
+:root[data-theme="dark"] .scan-wrap .input-group-text {
+  background-color: var(--muted);
+  border-color: var(--input);
+  color: var(--muted-foreground);
+}
+
+@media (max-width: 575.98px) {
+  .scan-log { height: 200px; }
+  .scan-ellipsis { max-width: 130px; }
+}

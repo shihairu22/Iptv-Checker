@@ -1,4 +1,4 @@
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 const logger = require('../core/logger');
 const config = require('../config');
 const storage = require('../storage');
@@ -14,6 +14,7 @@ const ALL_STREAM_FIELDS = [
 class StreamService {
     constructor() {
         this.streamCache = new Map();
+        this.inFlight = new Map(); // fullUrl -> [callback]，合并同一 URL 的并发探测
         this.CACHE_DURATION = 5 * 60 * 1000; // 5分钟缓存
     }
 
@@ -30,9 +31,25 @@ class StreamService {
             return callback(cached.data);
         }
 
-        // 使用json格式输出，便于解析
-        const cmd = `ffprobe -v quiet -print_format json -select_streams v:0 -show_streams -show_programs -show_format "${fullUrl}"`;
-        exec(cmd, { timeout: 8000 }, (error, stdout, stderr) => {
+        // 同一 URL 的并发探测合并成一次 ffprobe（批量扫描时避免重复起进程）
+        const waiting = this.inFlight.get(fullUrl);
+        if (waiting) {
+            waiting.push(callback);
+            return;
+        }
+        this.inFlight.set(fullUrl, [callback]);
+
+        // 用 execFile 传参数组，不经 shell —— 地址里出现引号/$() 也不会被解释
+        const args = [
+            '-v', 'quiet',
+            '-print_format', 'json',
+            '-select_streams', 'v:0',
+            '-show_streams',
+            '-show_programs',
+            '-show_format',
+            fullUrl
+        ];
+        execFile('ffprobe', args, { timeout: 8000 }, (error, stdout, stderr) => {
             let isAvailable = false;
             let frameRate = null;
             let bitRate = null;
@@ -92,8 +109,21 @@ class StreamService {
             };
             // 缓存
             this.streamCache.set(fullUrl, { data: result, timestamp: Date.now() });
-            callback(result);
+            this._settleProbe(fullUrl, result);
         });
+    }
+
+    /** 把一次探测结果分发给所有等待者（并发合并用） */
+    _settleProbe(fullUrl, result) {
+        const waiters = this.inFlight.get(fullUrl) || [];
+        this.inFlight.delete(fullUrl);
+        for (const waiter of waiters) {
+            try {
+                waiter(result);
+            } catch (err) {
+                // 单个回调异常不影响其他等待者
+            }
+        }
     }
 
     ffprobeCheckAsync(fullUrl) {

@@ -20,6 +20,7 @@ const catchupRoutes = require('./routes/catchup');
 const playerRoutes = require('./routes/player');
 const cdnRoutes = require('./routes/cdn');
 const contributionsRoutes = require('./routes/contributions');
+const scanTaskRoutes = require('./routes/scan-tasks');
 const storage = require('./storage');
 const streamsReader = require('./storage/streams-reader');
 const configReader = require('./storage/config-reader');
@@ -208,6 +209,7 @@ app.use('/api', systemRoutes);
 app.use('/api', logsRoutes);
 app.use('/api', cdnRoutes);
 app.use('/api', contributionsRoutes);
+app.use('/api', scanTaskRoutes);
 app.use('/api', webdavRoutes);
 app.use('/api', epgRoutes);
 app.use('/api', catchupRoutes);
@@ -220,6 +222,10 @@ app.get('/', (req, res) => {
 
 app.get('/results', (req, res) => {
     res.sendFile(path.join(__dirname, '../public/results.html'));
+});
+
+app.get('/scan', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/scan.html'));
 });
 
 // 全局错误处理
