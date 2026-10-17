@@ -10,6 +10,10 @@ on:
         description: 'Version tag (e.g., v1.0.0)'
         required: false
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   generate-rules-doc:
     runs-on: ubuntu-latest
@@ -56,12 +60,12 @@ jobs:
             const data = JSON.parse(fs.readFileSync('replay_base_rules.json', 'utf8'));
             const rules = data.rules || [];
 
-            let table = `
-## 当前版本规则
-
-| 省份 | 运营商 | 城市 | 类型 | 规则ID | 更新时间 | 贡献者 |
-|------|--------|------|------|--------|----------|--------|
-`;
+            let table = [
+              '## 当前版本规则',
+              '',
+              '| 省份 | 运营商 | 城市 | 类型 | 规则ID | 更新时间 | 贡献者 |',
+              '|------|--------|------|------|--------|----------|--------|'
+            ].join('\n') + '\n';
 
             rules.forEach(rule => {
               const province = rule.region?.province || '*';
@@ -87,80 +91,65 @@ jobs:
           }
           EOF
 
-      - name: Read rules table
-        id: table
-        run: |
-          cat rules_table.md
-          echo "---"
-          TABLE_CONTENT=$(cat rules_table.md)
-          echo "TABLE_CONTENT<<EOF" >> $GITHUB_OUTPUT
-          echo "$TABLE_CONTENT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
       - name: Update rules.md
         run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          TABLE_CONTENT="${{ steps.table.outputs.TABLE_CONTENT }}"
-
-          # Create updated rules.md
-          cat > docs/replay-rules/rules.md << 'MARKDOWN'
----
-title: 规则详情
----
-
-# 规则详情
-
-::: info 自动更新
-此页面由 GitHub Actions 自动从最新发布的规则版本生成。
-:::
-
-## 版本列表
-
-| 版本 | 发布日期 | 规则数 | 变更说明 |
-|------|----------|--------|----------|
-MARKDOWN
-
-          # Get version info
+          mkdir -p docs/replay-rules
           node << 'EOF'
           const fs = require('fs');
+
           const data = JSON.parse(fs.readFileSync('replay_base_rules.json', 'utf8'));
           const version = data.meta?.rules_version || '1.0.0';
           const updatedAt = data.meta?.updated_at?.split('T')[0] || '';
           const rulesCount = (data.rules || []).length;
           const changelog = (data.meta?.changelog || [])[0]?.changes?.join(', ') || '';
+          const table = fs.readFileSync('rules_table.md', 'utf8').trimEnd();
 
-          console.log(`| ${version} | ${updatedAt} | ${rulesCount} | ${changelog} |`);
-          EOF >> docs/replay-rules/rules.md
+          const lines = [
+            '---',
+            'title: 规则详情',
+            '---',
+            '',
+            '# 规则详情',
+            '',
+            '::: info 自动更新',
+            '此页面由 GitHub Actions 自动从最新发布的规则版本生成。',
+            ':::',
+            '',
+            '## 版本列表',
+            '',
+            '| 版本 | 发布日期 | 规则数 | 变更说明 |',
+            '|------|----------|--------|----------|',
+            `| ${version} | ${updatedAt} | ${rulesCount} | ${changelog} |`,
+            '',
+            '<!-- RULES_TABLE_START -->',
+            '',
+            table,
+            '<!-- RULES_TABLE_END -->',
+            '',
+            '## 历史版本',
+            '',
+            '### v1.0.0 (2026-03-17)',
+            '',
+            '**变更内容：**',
+            '- Initial release',
+            '- 湖南电信回放基础规则',
+            '- 15种时间格式支持',
+            '',
+            '## 数据来源',
+            '',
+            '- **规则索引**：[rules.json](https://github.com/CGG888/channel-sentinel/blob/main/rules/rules.json)',
+            '- **规则文件**：[rules/1.0.0/](https://github.com/CGG888/channel-sentinel/tree/main/rules/1.0.0)',
+            '- **原始提交**：[Issue #10](https://github.com/CGG888/channel-sentinel/issues/10)',
+            '',
+            '## 如何贡献',
+            '',
+            '如果您有新的规则想要贡献，请参考 [社区贡献](./community) 页面。',
+            ''
+          ];
 
-          cat >> docs/replay-rules/rules.md << 'MARKDOWN'
-
-<!-- RULES_TABLE_START -->
-MARKDOWN
-
-          cat rules_table.md >> docs/replay-rules/rules.md
-
-          cat >> docs/replay-rules/rules.md << 'MARKDOWN'
-<!-- RULES_TABLE_END -->
-
-## 历史版本
-
-### v1.0.0 (2026-03-17)
-
-**变更内容：**
-- Initial release
-- 湖南电信回放基础规则
-- 15种时间格式支持
-
-## 数据来源
-
-- **规则索引**：[rules.json](https://github.com/CGG888/channel-sentinel/blob/main/rules/rules.json)
-- **规则文件**：[rules/1.0.0/](https://github.com/CGG888/channel-sentinel/tree/main/rules/1.0.0)
-- **原始提交**：[Issue #10](https://github.com/CGG888/channel-sentinel/issues/10)
-
-## 如何贡献
-
-如果您有新的规则想要贡献，请参考 [社区贡献](./community) 页面。
-MARKDOWN
+          fs.writeFileSync('docs/replay-rules/rules.md', lines.join('\n'));
+          console.log('rules.md written:', lines.length, 'lines');
+          EOF
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7
